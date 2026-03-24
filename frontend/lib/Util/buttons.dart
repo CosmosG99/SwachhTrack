@@ -18,7 +18,7 @@ class Buttons extends StatelessWidget {
         ),
         onPressed: onPressed,
         label: Text(
-          "Login",
+          buttonText,
           style: TextStyle(fontSize: 30, color: Colors.white),
         ),
         style: ElevatedButton.styleFrom(
@@ -57,8 +57,34 @@ class GoogleLoginButton extends StatelessWidget {
           ),
         ),
         child: buttonType == "google"
-            ? Image.asset('assets/images/download.png', height: 50, width: 40)
-            : Image.asset('assets/images/mac.png', height: 50, width: 40),
+            ? Image.asset('assets/images/google.png', height: 50, width: 40)
+            : Image.asset('assets/images/ios.png', height: 50, width: 40),
+      ),
+    );
+  }
+}
+
+class RoleSelect extends StatelessWidget {
+  final VoidCallback onpressed;
+  final String role;
+
+  const RoleSelect({super.key, required this.onpressed, required this.role});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 150,
+      width: 150,
+      child: ElevatedButton(
+        onPressed: onpressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blueGrey,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadiusGeometry.circular(10),
+            side: BorderSide(color: Color.fromRGBO(229, 229, 235, 1), width: 4),
+          ),
+        ),
+        child: Image.asset('assets/images/$role.png'),
       ),
     );
   }
