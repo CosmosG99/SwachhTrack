@@ -10,6 +10,8 @@ const authRoutes = require('./routes/auth.routes');
 const attendanceRoutes = require('./routes/attendance.routes');
 const trackingRoutes = require('./routes/tracking.routes');
 const geofenceRoutes = require('./routes/geofence.routes');
+const taskRoutes = require('./routes/task.routes');
+const dashboardRoutes = require('./routes/dashboard.routes');
 
 const app = express();
 
@@ -39,6 +41,8 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/attendance', attendanceRoutes);
 app.use('/api/v1/tracking', trackingRoutes);
 app.use('/api/v1/geofences', geofenceRoutes);
+app.use('/api/v1/tasks', taskRoutes);
+app.use('/api/v1/dashboard', dashboardRoutes);
 
 // ─── 404 HANDLER ────────────────────────────────────────
 app.use((req, res) => {

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwachhTrack - QR Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+    }
+    h1 { color: #38bdf8; margin-bottom: 1.5rem; }
+    .card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 2rem;
+      max-width: 500px;
+      width: 100%;
+      margin-bottom: 1.5rem;
+    }
+    label { display: block; margin-bottom: 0.5rem; color: #94a3b8; font-size: 0.9rem; }
+    input, select {
+      width: 100%;
+      padding: 0.7rem;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e2e8f0;
+      margin-bottom: 1rem;
+      font-size: 1rem;
+    }
+    button {
+      width: 100%;
+      padding: 0.8rem;
+      border-radius: 8px;
+      border: none;
+      background: #2563eb;
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #1d4ed8; }
+    button:disabled { background: #475569; cursor: not-allowed; }
+    .qr-container {
+      text-align: center;
+      margin-top: 1.5rem;
+    }
+    .qr-container img {
+      border-radius: 12px;
+      background: white;
+      padding: 1rem;
+      max-width: 300px;
+    }
+    .status {
+      padding: 0.8rem;
+      border-radius: 8px;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+    .status.success { background: #064e3b; color: #6ee7b7; }
+    .status.error { background: #7f1d1d; color: #fca5a5; }
+    .qr-data {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: #0f172a;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.8rem;
+      word-break: break-all;
+      color: #a5b4fc;
+    }
+    .step-badge {
+      display: inline-block;
+      background: #2563eb;
+      color: white;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 28px;
+      font-weight: bold;
+      margin-right: 0.5rem;
+    }
+    h3 { margin-bottom: 1rem; }
+    .info { color: #94a3b8; font-size: 0.85rem; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>🔲 SwachhTrack QR Test</h1>
+
+  <!-- Step 1: Login -->
+  <div class="card">
+    <h3><span class="step-badge">1</span> Login as Admin</h3>
+    <label>Employee ID</label>
+    <input type="text" id="empId" value="ADMIN001">
+    <label>Password</label>
+    <input type="password" id="password" value="admin123">
+    <button onclick="login()">Login</button>
+    <div id="loginStatus"></div>
+  </div>
+
+  <!-- Step 2: Select Geofence & Generate QR -->
+  <div class="card" id="qrSection" style="display:none;">
+    <h3><span class="step-badge">2</span> Generate Attendance QR</h3>
+    <label>Select Geofence</label>
+    <select id="geofenceSelect">
+      <option value="">Loading...</option>
+    </select>
+    <button onclick="generateQR()">Generate QR Code</button>
+    <div id="qrStatus"></div>
+
+    <div class="qr-container" id="qrDisplay" style="display:none;">
+      <img id="qrImage" src="" alt="QR Code">
+      <p class="info">📱 Scan this QR code with your phone camera!</p>
+      <div class="qr-data" id="qrDataText"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = 'http://localhost:5000/api/v1';
+    let token = '';
+
+    async function login() {
+      const empId = document.getElementById('empId').value;
+      const password = document.getElementById('password').value;
+      const statusDiv = document.getElementById('loginStatus');
+
+      try {
+        const res = await fetch(`${API}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ employee_id: empId, password }),
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          token = data.token;
+          statusDiv.innerHTML = `<div class="status success">✅ Logged in as ${data.user.name} (${data.user.role})</div>`;
+          document.getElementById('qrSection').style.display = 'block';
+          loadGeofences();
+        } else {
+          statusDiv.innerHTML = `<div class="status error">❌ ${data.error}</div>`;
+        }
+      } catch (err) {
+        statusDiv.innerHTML = `<div class="status error">❌ Cannot connect to server. Is it running?</div>`;
+      }
+    }
+
+    async function loadGeofences() {
+      try {
+        const res = await fetch(`${API}/geofences`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const data = await res.json();
+        const select = document.getElementById('geofenceSelect');
+        select.innerHTML = '';
+
+        if (data.geofences.length === 0) {
+          select.innerHTML = '<option value="">No geofences found</option>';
+          return;
+        }
+
+        data.geofences.forEach(g => {
+          const opt = document.createElement('option');
+          opt.value = g.id;
+          opt.textContent = `${g.name} (${g.type} - ${g.radius_meters}m)`;
+          select.appendChild(opt);
+        });
+      } catch (err) {
+        console.error('Failed to load geofences:', err);
+      }
+    }
+
+    async function generateQR() {
+      const geofenceId = document.getElementById('geofenceSelect').value;
+      const statusDiv = document.getElementById('qrStatus');
+
+      if (!geofenceId) {
+        statusDiv.innerHTML = '<div class="status error">❌ Select a geofence first.</div>';
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API}/attendance/qr/generate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ geofence_id: geofenceId }),
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          statusDiv.innerHTML = `<div class="status success">✅ QR generated for "${data.geofence.name}" (valid for ${data.valid_for})</div>`;
+
+          document.getElementById('qrImage').src = data.qr_image;
+          document.getElementById('qrDataText').textContent = data.qr_data;
+          document.getElementById('qrDisplay').style.display = 'block';
+        } else {
+          statusDiv.innerHTML = `<div class="status error">❌ ${data.error}</div>`;
+        }
+      } catch (err) {
+        statusDiv.innerHTML = `<div class="status error">❌ Request failed. Is server running?</div>`;
+      }
+    }
+  </script>
+</body>
+</html>

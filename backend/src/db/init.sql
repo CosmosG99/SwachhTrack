@@ -103,3 +103,40 @@ CREATE TABLE IF NOT EXISTS anomalies (
 );
 
 CREATE INDEX IF NOT EXISTS idx_anomalies_user ON anomalies (user_id, detected_at DESC);
+
+-- ==================== TASKS ====================
+CREATE TABLE IF NOT EXISTS tasks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    type VARCHAR(30) DEFAULT 'other'
+        CHECK (type IN (
+            'waste_collection', 'sweeping', 'road_repair',
+            'water_supply', 'drainage', 'inspection', 'other'
+        )),
+    priority VARCHAR(10) DEFAULT 'medium'
+        CHECK (priority IN ('low', 'medium', 'high', 'critical')),
+    status VARCHAR(20) DEFAULT 'not_started'
+        CHECK (status IN ('not_started', 'in_progress', 'completed', 'accepted', 'rejected')),
+    assigned_to UUID REFERENCES users(id),
+    assigned_by UUID REFERENCES users(id) NOT NULL,
+    ward_id INTEGER,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    location GEOGRAPHY(POINT, 4326),
+    due_date TIMESTAMPTZ,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    proof_image TEXT,
+    proof_latitude DOUBLE PRECISION,
+    proof_longitude DOUBLE PRECISION,
+    proof_notes TEXT,
+    supervisor_comment TEXT,
+    reviewed_by UUID REFERENCES users(id),
+    reviewed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks (assigned_to, status);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status, created_at DESC);
