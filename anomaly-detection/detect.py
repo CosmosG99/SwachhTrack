@@ -1,20 +1,19 @@
 """
-PPE Safety Gate System - No dlib / No face_recognition
-=======================================================
-Uses OpenCV built-in LBPH Face Recognizer instead.
+PPE Safety Gate — Full-Face Black Helmet Detection (Vega style)
+================================================================
+Problem with full-face helmets:
+  - When helmet is ON, the face is COMPLETELY COVERED
+  - Face detector fails → last_face_box must be used as anchor
+  - Helmet appears as a LARGE DARK ROUNDED BLOB covering face + above
 
-Dependencies (already installed):
-    pip install opencv-python ultralytics numpy
+Strategy:
+  1. IDENTIFY the worker WITHOUT helmet (face visible)
+  2. Store face position
+  3. Ask worker to put on helmet
+  4. Detect helmet as a large dark object in the stored face region
+     that is BIGGER than the face alone (helmet is wider + taller)
 
-Folder setup:
-    Images/
-        Ram.jpg       ← one clear face photo per worker
-        Priya.jpg
-    yolov8n.pt        ← your YOLOv8 model
-    Main.py           ← this file
-
-Run:
-    py -3.11 Main.py
+Run:  py -3.11 Main.py
 """
 
 import os
@@ -24,24 +23,29 @@ import time
 import pickle
 import numpy as np
 from datetime import datetime
-from ultralytics import YOLO
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 IMAGES_FOLDER      = "Images"
-MODEL_PATH         = "yolov8n.pt"
 ENCODE_FILE        = "FaceModel.pkl"
 LOG_FILE           = "logs/attendance.csv"
 
 RECHECK_SECONDS    = 30
-PPE_CONFIRM_FRAMES = 10
-PPE_TIMEOUT_FRAMES = 150
+PPE_CONFIRM_FRAMES = 12
+PPE_TIMEOUT_FRAMES = 200
 RESULT_DISPLAY_SEC = 3
-FACE_CONFIDENCE    = 50 # lower = stricter (LBPH confidence, not %)
+FACE_CONFIDENCE    = 55
 
-# Update these to match YOUR model's class names
-# Run check_model_classes.py to see what your model detects
-HELMET_CLASSES = {'helmet', 'hard hat', 'hardhat', 'safety helmet', 'hard-hat'}
-GLOVE_CLASSES  = {'glove', 'gloves', 'safety glove'}
+# ── Helmet detection tuning ──────────────────────────────────────────────────
+# The helmet blob must be this many times LARGER than the stored face box
+# Full-face helmets are typically 1.4x–2x wider than the face alone
+HELMET_SIZE_RATIO  = 1.3   # blob width must be >= face_width * this value
+
+# Darkness threshold — pixels below this brightness are "dark"
+# 60 works well indoors; increase to 80 if room is very bright
+DARK_PIXEL_THRESH  = 70
+
+# Minimum % of the search zone that must be dark
+MIN_DARK_COVERAGE  = 0.55
 
 # ─── States ──────────────────────────────────────────────────────────────────
 STATE_IDLE         = 0
@@ -51,7 +55,6 @@ STATE_GRANTED      = 3
 STATE_DENIED       = 4
 STATE_ALREADY_DONE = 5
 
-# ─── Colors BGR ──────────────────────────────────────────────────────────────
 GREEN  = (0, 220, 0)
 RED    = (0, 0, 220)
 ORANGE = (0, 165, 255)
@@ -72,234 +75,211 @@ def log_event(worker_id, status):
         writer.writerow([now, worker_id, status])
     print(f"[LOG] {now}  {worker_id}  →  {status}")
 
-# ─── Face Model (OpenCV LBPH) ─────────────────────────────────────────────────
+# ─── Face Model ──────────────────────────────────────────────────────────────
 def build_face_model():
     print("Building face model from Images/ folder...")
-
     face_cascade = cv2.CascadeClassifier(
         cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-
-    faces       = []
-    labels      = []
-    worker_ids  = []
-
+    faces, labels, worker_ids = [], [], []
     image_files = [f for f in os.listdir(IMAGES_FOLDER)
                    if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-
     if not image_files:
-        print(f"[ERROR] No images found in {IMAGES_FOLDER}/")
-        print("  Add photos like:  Images/Ram.jpg")
+        print(f"[ERROR] No images in {IMAGES_FOLDER}/")
         exit(1)
-
     for fname in image_files:
-        path = os.path.join(IMAGES_FOLDER, fname)
-        img  = cv2.imread(path)
+        img = cv2.imread(os.path.join(IMAGES_FOLDER, fname))
         if img is None:
-            print(f"  [WARN] Could not read {fname}, skipping.")
             continue
-
-        gray      = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        detected  = face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(60,60))
-
+        gray     = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        detected = face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(60, 60))
         if len(detected) == 0:
-            print(f"  [WARN] No face found in {fname}, skipping.")
+            print(f"  [WARN] No face in {fname}, skipping.")
             continue
-
         worker_id = os.path.splitext(fname)[0]
-        label     = len(worker_ids)
-
-        # Use the largest detected face
         x, y, w, h = max(detected, key=lambda r: r[2]*r[3])
-        face_gray   = cv2.resize(gray[y:y+h, x:x+w], (200, 200))
-
-        faces.append(face_gray)
-        labels.append(label)
+        faces.append(cv2.resize(gray[y:y+h, x:x+w], (200, 200)))
+        labels.append(len(worker_ids))
         worker_ids.append(worker_id)
         print(f"  ✓ Registered: {worker_id}")
-
     if not faces:
-        print("[ERROR] No valid faces found. Check your Images/ folder.")
+        print("[ERROR] No faces found.")
         exit(1)
-
     recognizer = cv2.face.LBPHFaceRecognizer_create()
     recognizer.train(faces, np.array(labels))
-
     with open(ENCODE_FILE, 'wb') as f:
         pickle.dump(worker_ids, f)
     recognizer.save("FaceModel_lbph.yml")
-
-    print(f"\nDone! {len(faces)} workers registered.\n")
+    print(f"Done! {len(faces)} workers registered.\n")
     return recognizer, worker_ids
-
 
 def load_face_model():
     if not os.path.exists(ENCODE_FILE) or not os.path.exists("FaceModel_lbph.yml"):
         return build_face_model()
-
     with open(ENCODE_FILE, 'rb') as f:
         worker_ids = pickle.load(f)
-
     recognizer = cv2.face.LBPHFaceRecognizer_create()
     recognizer.read("FaceModel_lbph.yml")
     print(f"Loaded face model — {len(worker_ids)} workers.")
     return recognizer, worker_ids
 
 
-# ─── PPE Detection ───────────────────────────────────────────────────────────
-# ─── Improved PPE Detection with Spatial Logic ──────────────────────────────
-def check_ppe(frame, model):
-    results = model(frame, verbose=False)[0]
-    has_helmet = False
-    has_gloves = False
+# ─── Full-Face Black Helmet Detector ─────────────────────────────────────────
+def detect_fullface_helmet(frame, face_x, face_y, face_w, face_h):
     annotated = frame.copy()
+    h_fr, w_fr = frame.shape[:2]
 
-    # Separate detections into categories
-    persons = []
-    helmets = []
+    # 1. Define the TWO critical zones relative to the face
+    # Zone A: The Top Dome (above eyes)
+    # Zone B: The Chin Guard (below mouth)
     
-    for box in results.boxes:
-        cls_id = int(box.cls)
-        cls_name = model.names[cls_id].lower()
-        conf = float(box.conf)
-        if conf < 0.45: continue
-        
-        coords = map(int, box.xyxy[0])
-        x1, y1, x2, y2 = coords
+    # Coordinates for Chin Guard Zone (Crucial for Full-Face helmets)
+    chin_rx1 = max(0, face_x - int(face_w * 0.2))
+    chin_rx2 = min(w_fr, face_x + face_w + int(face_w * 0.2))
+    chin_ry1 = face_y + int(face_h * 0.7)  # Starts at lower face
+    chin_ry2 = min(h_fr, face_y + int(face_h * 1.3)) # Ends below chin
 
-        # 1. Store Persons and Helmets for spatial comparison
-        if "person" in cls_name:
-            persons.append((x1, y1, x2, y2))
-        elif any(c in cls_name for c in HELMET_CLASSES):
-            helmets.append((x1, y1, x2, y2))
-            cv2.rectangle(annotated, (x1,y1), (x2,y2), GREEN, 2)
-        elif any(c in cls_name for c in GLOVE_CLASSES):
-            has_gloves = True # Gloves can be anywhere near the body
-            cv2.rectangle(annotated, (x1,y1), (x2,y2), (0,200,255), 2)
+    # Coordinates for Top Dome
+    top_ry1 = max(0, face_y - int(face_h * 0.8))
+    top_ry2 = face_y + int(face_h * 0.2)
 
-    # 2. Check if a helmet is specifically ON a person's head
-    for (px1, py1, px2, py2) in persons:
-        head_limit = py1 + int((py2 - py1) * 0.3) # Top 30% of body
-        
-        for (hx1, hy1, hx2, hy2) in helmets:
-            # Check if helmet center is within person's horizontal width 
-            # and vertically near the head area
-            h_center_x = (hx1 + hx2) / 2
-            if px1 < h_center_x < px2 and hy1 < head_limit:
-                has_helmet = True
-                cv2.rectangle(annotated, (px1, py1), (px2, py2), GREEN, 2)
-                break
-        
-        if not has_helmet:
-            cv2.rectangle(annotated, (px1, py1), (px2, py2), RED, 3)
+    # 2. Extract and Test the Chin Zone
+    chin_roi = frame[chin_ry1:chin_ry2, chin_rx1:chin_rx2]
+    if chin_roi.size == 0: return False, annotated, 0.0
+    
+    chin_gray = cv2.cvtColor(chin_roi, cv2.COLOR_BGR2GRAY)
+    # Strict threshold: must be very dark to be plastic
+    _, chin_mask = cv2.threshold(chin_gray, 55, 255, cv2.THRESH_BINARY_INV)
+    
+    chin_coverage = cv2.countNonZero(chin_mask) / (chin_roi.shape[0] * chin_roi.shape[1])
 
-    return has_helmet, has_gloves, annotated
-# ─── UI Helpers ──────────────────────────────────────────────────────────────
+    # 3. Decision Logic
+    # If there is a solid dark mass across the CHIN area, it's a helmet.
+    # Hair/Bare faces will have skin tones or gaps here, giving low coverage.
+    
+    has_helmet = chin_coverage > 0.5  # 50% of the chin zone must be black plastic
+    
+    # --- Visualization ---
+    # Draw the Chin Guard search box
+    color = GREEN if has_helmet else RED
+    cv2.rectangle(annotated, (chin_rx1, chin_ry1), (chin_rx2, chin_ry2), color, 2)
+    cv2.putText(annotated, f"Chin Bar: {chin_coverage:.2f}", (chin_rx1, chin_ry1-5), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+    print(f"[PPE] Chin Coverage: {chin_coverage:.2f} | Result: {has_helmet}")
+
+    return has_helmet, annotated, chin_coverage
+# ─── UI ──────────────────────────────────────────────────────────────────────
 def put_text(img, text, pos, scale=0.65, color=WHITE, thickness=2):
     cv2.putText(img, text, pos, cv2.FONT_HERSHEY_DUPLEX, scale, color, thickness)
 
-
 def draw_panel(frame):
     overlay = frame.copy()
-    cv2.rectangle(overlay, (640, 0), (960, 480), (20,20,20), -1)
+    cv2.rectangle(overlay, (640, 0), (960, 480), (20, 20, 20), -1)
     cv2.addWeighted(overlay, 0.85, frame, 0.15, 0, frame)
-
 
 def draw_idle(frame):
     draw_panel(frame)
-    put_text(frame, "PPE SAFETY GATE",   (655, 100), scale=0.7, color=YELLOW)
-    cv2.line(frame, (650,115), (950,115), YELLOW, 1)
-    put_text(frame, "Please face the",   (665, 200), scale=0.6, color=WHITE)
-    put_text(frame, "camera to sign in", (655, 230), scale=0.6, color=WHITE)
+    put_text(frame, "PPE SAFETY GATE",   (655, 100), scale=0.7,  color=YELLOW)
+    cv2.line(frame, (650, 115), (950, 115), YELLOW, 1)
+    put_text(frame, "Show your face",    (665, 190), scale=0.6,  color=WHITE)
+    put_text(frame, "WITHOUT helmet",    (660, 220), scale=0.6,  color=ORANGE)
+    put_text(frame, "to sign in first",  (655, 250), scale=0.6,  color=WHITE)
     if int(time.time() * 2) % 2 == 0:
-        cv2.circle(frame, (790, 320), 8, GREEN, -1)
-    put_text(frame, "Waiting...", (760, 360), scale=0.55, color=(150,150,150))
-
+        cv2.circle(frame, (790, 330), 8, GREEN, -1)
+    put_text(frame, "Waiting...", (755, 370), scale=0.55, color=(150,150,150))
 
 def draw_worker_card(frame, worker_id, photo=None):
     draw_panel(frame)
-    h, w, _ = frame.shape # Get actual frame dimensions
-    
-    put_text(frame, "WORKER IDENTIFIED", (655, 40), scale=0.65, color=GREEN)
-    cv2.line(frame, (650,55), (w-10,55), GREEN, 1) # Use w instead of 950
-    
+    put_text(frame, "WORKER IDENTIFIED", (655, 40),  scale=0.65, color=GREEN)
+    cv2.line(frame, (650, 55), (950, 55), GREEN, 1)
     if photo is not None:
-        thumb = cv2.resize(photo, (120, 120))
-        # Check if we have enough width to place the photo
-        if w > 780:
-            frame[70:190, 660:780] = thumb
-        else:
-            # Place it further left if the window is narrow
-            frame[70:190, w-130:w-10] = thumb
-            
-    put_text(frame, f"ID: {worker_id}", (660, 215), scale=0.6, color=WHITE)
-    put_text(frame, "Now put on your PPE", (655, 270), scale=0.55, color=YELLOW)
+        try:
+            frame[70:190, 660:780] = cv2.resize(photo, (120, 120))
+        except:
+            pass
+    put_text(frame, f"ID: {worker_id}",     (660, 215), scale=0.6,  color=WHITE)
+    put_text(frame, "NOW PUT ON YOUR",      (655, 265), scale=0.55, color=YELLOW)
+    put_text(frame, "FULL-FACE HELMET",     (655, 295), scale=0.6,  color=YELLOW)
+    put_text(frame, "then face camera",     (660, 325), scale=0.5,  color=(180,180,180))
 
-def draw_ppe_status(frame, has_helmet, has_gloves, streak, max_streak):
+def draw_ppe_status(frame, has_helmet, streak, max_streak, coverage=0.0):
     draw_panel(frame)
-    put_text(frame, "PPE SAFETY CHECK", (660, 40), scale=0.7, color=YELLOW)
-    cv2.line(frame, (650,55), (950,55), YELLOW, 1)
+    put_text(frame, "HELMET CHECK",  (660, 40), scale=0.75, color=YELLOW)
+    cv2.line(frame, (650, 58), (950, 58), YELLOW, 1)
 
     h_col  = GREEN if has_helmet else RED
-    g_col  = GREEN if has_gloves else RED
-    put_text(frame, f"[{'OK' if has_helmet else '--'}] HELMET", (660,110), color=h_col, scale=0.75)
-    put_text(frame, f"[{'OK' if has_gloves else '--'}] GLOVES", (660,160), color=g_col, scale=0.75)
+    h_text = "HELMET : DETECTED" if has_helmet else "HELMET : NOT FOUND"
+    put_text(frame, h_text, (660, 110), color=h_col, scale=0.7)
 
-    bx, by, bw, bh = 660, 200, 280, 18
-    cv2.rectangle(frame, (bx,by), (bx+bw, by+bh), (60,60,60), -1)
-    filled = int(bw * min(streak/max_streak, 1.0))
+    # Coverage bar
+    bx, by, bw, bh = 660, 145, 280, 16
+    cv2.rectangle(frame, (bx, by), (bx+bw, by+bh), (60,60,60), -1)
+    filled = int(bw * min(coverage / 0.50, 1.0))
     if filled > 0:
-        cv2.rectangle(frame, (bx,by), (bx+filled, by+bh),
-                      GREEN if (has_helmet and has_gloves) else RED, -1)
-    cv2.rectangle(frame, (bx,by), (bx+bw, by+bh), WHITE, 1)
-    put_text(frame, f"Confirming {streak}/{max_streak}", (660,240), scale=0.5)
-    put_text(frame, "Wear ALL required PPE",  (660,290), scale=0.5, color=ORANGE)
+        cv2.rectangle(frame, (bx, by), (bx+filled, by+bh),
+                      GREEN if has_helmet else (80,80,80), -1)
+    cv2.rectangle(frame, (bx, by), (bx+bw, by+bh), WHITE, 1)
+    put_text(frame, f"Dark coverage: {coverage:.0%}", (660, 182),
+             scale=0.45, color=(180,180,180))
 
+    # Streak bar
+    by2 = 200
+    cv2.rectangle(frame, (bx, by2), (bx+bw, by2+bh), (60,60,60), -1)
+    f2 = int(bw * min(streak / max_streak, 1.0))
+    if f2 > 0:
+        cv2.rectangle(frame, (bx, by2), (bx+f2, by2+bh),
+                      GREEN if has_helmet else RED, -1)
+    cv2.rectangle(frame, (bx, by2), (bx+bw, by2+bh), WHITE, 1)
+    put_text(frame, f"Confirming {streak}/{max_streak}", (660, 237), scale=0.5)
+
+    put_text(frame, "Yellow box = search zone", (660, 265),
+             scale=0.44, color=(200,200,0))
+
+    if not has_helmet:
+        put_text(frame, "Put on full-face helmet", (660, 292), scale=0.5,  color=ORANGE)
+        put_text(frame, "& face the camera",       (660, 315), scale=0.5,  color=ORANGE)
+    else:
+        put_text(frame, "Helmet on! Hold still...", (660, 292), scale=0.5, color=GREEN)
 
 def draw_result(frame, granted, name):
     draw_panel(frame)
     if granted:
-        put_text(frame, "ACCESS GRANTED",  (655,180), scale=0.9, color=GREEN, thickness=2)
-        put_text(frame, f"Welcome, {name}!",(660,230), scale=0.65, color=GREEN)
-        put_text(frame, "PPE Verified OK",  (660,265), scale=0.6,  color=GREEN)
-        put_text(frame, "Proceed to work",  (660,300), scale=0.6,  color=WHITE)
+        put_text(frame, "ACCESS GRANTED",  (655, 155), scale=0.9,  color=GREEN, thickness=2)
+        put_text(frame, f"Welcome,",       (660, 205), scale=0.65, color=GREEN)
+        put_text(frame, f"{name}!",        (660, 238), scale=0.65, color=GREEN)
+        put_text(frame, "Helmet Verified", (660, 285), scale=0.6,  color=GREEN)
+        put_text(frame, "Proceed to work", (660, 318), scale=0.6,  color=WHITE)
     else:
-        put_text(frame, "ACCESS DENIED",   (660,180), scale=0.9, color=RED, thickness=2)
-        put_text(frame, "PPE not detected", (660,230), scale=0.65, color=RED)
-        put_text(frame, "Wear helmet &",    (660,265), scale=0.6,  color=ORANGE)
-        put_text(frame, "gloves before",    (660,295), scale=0.6,  color=ORANGE)
-        put_text(frame, "entering.",        (660,325), scale=0.6,  color=ORANGE)
-
+        put_text(frame, "ACCESS DENIED",   (660, 155), scale=0.9,  color=RED, thickness=2)
+        put_text(frame, "No helmet found", (660, 205), scale=0.65, color=RED)
+        put_text(frame, "Wear full-face",  (660, 255), scale=0.6,  color=ORANGE)
+        put_text(frame, "helmet before",   (660, 285), scale=0.6,  color=ORANGE)
+        put_text(frame, "entering.",       (660, 315), scale=0.6,  color=ORANGE)
 
 # ─── Recent check tracker ────────────────────────────────────────────────────
 last_check_times = {}
-
 def was_checked_recently(wid):
     last = last_check_times.get(wid)
-    if last is None:
-        return False
+    if last is None: return False
     return (datetime.now() - last).total_seconds() < RECHECK_SECONDS
-
 def mark_checked(wid):
     last_check_times[wid] = datetime.now()
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════════
-print("=" * 50)
-print("  PPE Safety Gate — Loading...")
-print("=" * 50)
+print("=" * 55)
+print("  PPE Safety Gate — Full-Face Black Helmet")
+print("=" * 55)
+print(f"  Size ratio needed : {HELMET_SIZE_RATIO}x face width")
+print(f"  Dark pixel thresh : {DARK_PIXEL_THRESH}")
+print(f"  Min dark coverage : {MIN_DARK_COVERAGE:.0%}")
+print("=" * 55)
 
 recognizer, worker_ids = load_face_model()
 face_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
-ppe_model = YOLO(MODEL_PATH)
-print(f"YOLOv8 loaded. Classes: {list(ppe_model.names.values())}")
-print("\n[INFO] Press Q to quit.")
-print("[INFO] Delete FaceModel.pkl + FaceModel_lbph.yml to re-register workers.\n")
-
-# Pre-load worker photos
 worker_photos = {}
 for wid in worker_ids:
     for ext in ('.jpg', '.jpeg', '.png'):
@@ -308,8 +288,12 @@ for wid in worker_ids:
             worker_photos[wid] = cv2.imread(p)
             break
 
+print("\n[INFO] Step 1: Stand in front of camera WITHOUT helmet to be identified.")
+print("[INFO] Step 2: Put on your full-face helmet and face camera.")
+print("[INFO] Press Q to quit.\n")
+
 cap = cv2.VideoCapture(0)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH,  960)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 state         = STATE_IDLE
@@ -319,35 +303,44 @@ ppe_streak    = 0
 ppe_counter   = 0
 result_timer  = 0
 info_counter  = 0
+last_coverage = 0.0
+last_face_box = None   # CRITICAL: stores face position for helmet search
 
 while True:
     ret, frame = cap.read()
     if not ret:
-        print("[ERROR] Camera not found. Check connection.")
+        print("[ERROR] Camera not found.")
         break
 
     display = frame.copy()
     gray    = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    # ── Face detection every frame ────────────────────────────────────────────
-    faces_detected = face_cascade.detectMultiScale(
-        gray, scaleFactor=1.1, minNeighbors=5, minSize=(60,60))
+    # ── Face detection ────────────────────────────────────────────────────────
+    faces_found = face_cascade.detectMultiScale(
+        gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
 
-    detected_id = None
-    for (x, y, w, h) in faces_detected:
-        face_roi  = cv2.resize(gray[y:y+h, x:x+w], (200, 200))
+    detected_id   = None
+    detected_face = None
+
+    for (x, y, w, h) in faces_found:
+        face_roi          = cv2.resize(gray[y:y+h, x:x+w], (200, 200))
         label, confidence = recognizer.predict(face_roi)
 
-        if confidence < FACE_CONFIDENCE:          # recognised
-            detected_id = worker_ids[label]
-            box_color   = GREEN if state == STATE_GRANTED else YELLOW
-            cv2.rectangle(display, (x,y), (x+w, y+h), box_color, 2)
+        if confidence < FACE_CONFIDENCE:
+            detected_id   = worker_ids[label]
+            detected_face = (x, y, w, h)
+            box_color     = GREEN if state == STATE_GRANTED else YELLOW
+            cv2.rectangle(display, (x, y), (x+w, y+h), box_color, 2)
             cv2.putText(display, f"{detected_id} ({int(confidence)})",
                         (x, y-8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, box_color, 2)
-        else:                                      # unknown
-            cv2.rectangle(display, (x,y), (x+w, y+h), RED, 2)
-            cv2.putText(display, "Unknown", (x, y-8),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, RED, 2)
+        else:
+            cv2.rectangle(display, (x, y), (x+w, y+h), RED, 2)
+            cv2.putText(display, "Unknown",
+                        (x, y-8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, RED, 2)
+
+    # Only update face box when face is actually visible (not when helmet is on)
+    if detected_face and state in (STATE_IDLE, STATE_SHOW_INFO):
+        last_face_box = detected_face
 
     # ── State Machine ─────────────────────────────────────────────────────────
     if state == STATE_IDLE:
@@ -356,69 +349,98 @@ while True:
             current_id    = detected_id
             current_photo = worker_photos.get(detected_id)
             info_counter  = 0
+            print(f"\n[IDENTIFIED] Worker: {current_id}  "
+                  f"Face stored at: {detected_face}")
             state = STATE_ALREADY_DONE if was_checked_recently(current_id) \
                     else STATE_SHOW_INFO
 
     elif state == STATE_SHOW_INFO:
+        # Keep updating face box while worker is still visible
+        if detected_face:
+            last_face_box = detected_face
         draw_worker_card(display, current_id, current_photo)
         info_counter += 1
-        if info_counter > 60:
-            state       = STATE_PPE_CHECK
-            ppe_streak  = 0
-            ppe_counter = 0
+        if info_counter > 80:   # ~2.5 sec to give time to put helmet on
+            if last_face_box is None:
+                print("[WARN] No face position stored — cannot check helmet.")
+                state = STATE_IDLE
+            else:
+                state       = STATE_PPE_CHECK
+                ppe_streak  = 0
+                ppe_counter = 0
+                print(f"[PPE] Helmet check started. Using face box: {last_face_box}")
 
     elif state == STATE_PPE_CHECK:
-        has_helmet, has_gloves, annotated = check_ppe(frame, ppe_model)
-        display = annotated.copy()
-        draw_ppe_status(display, has_helmet, has_gloves, ppe_streak, PPE_CONFIRM_FRAMES)
-        ppe_counter += 1
+        has_helmet    = False
+        last_coverage = 0.0
 
-        ppe_streak = (ppe_streak + 1) if (has_helmet and has_gloves) \
-                     else max(0, ppe_streak - 1)
+        if last_face_box:
+            fx, fy, fw, fh = last_face_box
+            has_helmet, display, last_coverage = detect_fullface_helmet(
+                frame, fx, fy, fw, fh)
+        else:
+            display = frame.copy()
+            print("[WARN] No face box — cannot detect helmet.")
+
+        draw_ppe_status(display, has_helmet, ppe_streak,
+                        PPE_CONFIRM_FRAMES, last_coverage)
+        ppe_counter += 1
+        ppe_streak = (ppe_streak + 1) if has_helmet else max(0, ppe_streak - 1)
+
+        if ppe_counter % 20 == 0:
+            print(f" ... Streak: {ppe_streak}/{PPE_CONFIRM_FRAMES}  "
+                  f"Coverage: {last_coverage:.1%}")
 
         if ppe_streak >= PPE_CONFIRM_FRAMES:
             log_event(current_id, "GRANTED")
             mark_checked(current_id)
+            print(f"[SUCCESS] {current_id} — Helmet verified. GRANTED.")
             state        = STATE_GRANTED
             result_timer = time.time()
 
         elif ppe_counter > PPE_TIMEOUT_FRAMES:
             log_event(current_id, "DENIED")
+            print(f"[DENIED] {current_id} — No helmet. DENIED.")
             state        = STATE_DENIED
             result_timer = time.time()
 
     elif state == STATE_GRANTED:
         draw_result(display, granted=True,  name=current_id)
         if time.time() - result_timer > RESULT_DISPLAY_SEC:
+            last_face_box = None
             state = STATE_IDLE
 
     elif state == STATE_DENIED:
         draw_result(display, granted=False, name=current_id)
         if time.time() - result_timer > RESULT_DISPLAY_SEC:
+            last_face_box = None
             state = STATE_IDLE
 
     elif state == STATE_ALREADY_DONE:
         draw_panel(display)
-        put_text(display, "Already checked in!",          (655, 190), scale=0.7,  color=ORANGE)
-        put_text(display, f"ID: {current_id}",            (665, 235), scale=0.6,  color=WHITE)
-        put_text(display, f"Wait {RECHECK_SECONDS}s",     (665, 275), scale=0.55, color=(150,150,150))
+        put_text(display, "Already checked in!",      (655, 190), scale=0.7,  color=ORANGE)
+        put_text(display, f"ID: {current_id}",        (665, 235), scale=0.6,  color=WHITE)
+        put_text(display, f"Wait {RECHECK_SECONDS}s", (665, 275), scale=0.55,
+                 color=(150,150,150))
         info_counter += 1
         if info_counter > 90:
             state = STATE_IDLE
 
     # ── Status bar ────────────────────────────────────────────────────────────
     labels_map = {
-        STATE_IDLE:"WAITING FOR WORKER", STATE_SHOW_INFO:"WORKER IDENTIFIED",
-        STATE_PPE_CHECK:"CHECKING PPE...", STATE_GRANTED:"ACCESS GRANTED",
-        STATE_DENIED:"ACCESS DENIED", STATE_ALREADY_DONE:"ALREADY CHECKED IN"
+        STATE_IDLE:"SHOW FACE TO SIGN IN",   STATE_SHOW_INFO:"IDENTIFIED — PUT ON HELMET",
+        STATE_PPE_CHECK:"CHECKING HELMET...", STATE_GRANTED:"ACCESS GRANTED",
+        STATE_DENIED:"ACCESS DENIED",        STATE_ALREADY_DONE:"ALREADY CHECKED IN"
     }
     colors_map = {
-        STATE_IDLE:DARK, STATE_SHOW_INFO:(0,100,150), STATE_PPE_CHECK:(0,120,180),
-        STATE_GRANTED:(0,100,0), STATE_DENIED:(0,0,150), STATE_ALREADY_DONE:(0,100,150)
+        STATE_IDLE:DARK,             STATE_SHOW_INFO:(0,100,150),
+        STATE_PPE_CHECK:(0,120,180), STATE_GRANTED:(0,100,0),
+        STATE_DENIED:(0,0,150),      STATE_ALREADY_DONE:(0,100,150)
     }
     cv2.rectangle(display, (0,455), (960,480), colors_map.get(state, DARK), -1)
-    put_text(display, labels_map.get(state,""), (10,473),  scale=0.5, color=WHITE)
-    put_text(display, datetime.now().strftime("%H:%M:%S"), (860,473), scale=0.5, color=(180,180,180))
+    put_text(display, labels_map.get(state,""),            (10, 473),  scale=0.5, color=WHITE)
+    put_text(display, datetime.now().strftime("%H:%M:%S"), (860, 473), scale=0.5,
+             color=(180,180,180))
 
     cv2.imshow("PPE Safety Gate", display)
     if cv2.waitKey(1) & 0xFF == ord('q'):
