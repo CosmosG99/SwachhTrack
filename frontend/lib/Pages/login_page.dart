@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:swacchtrack/Pages/homepage.dart';
 import 'package:swacchtrack/Pages/signup_page.dart';
 import 'package:swacchtrack/Util/buttons.dart';
 import 'package:swacchtrack/Util/textfields.dart';
+import 'package:swacchtrack/services/api_service.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -11,8 +13,47 @@ class Login extends StatefulWidget {
 }
 
 class _LoginState extends State<Login> {
-  final userController = TextEditingController();
+  final employeeIdController = TextEditingController();
   final passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  Future<void> _handleLogin() async {
+    final employeeId = employeeIdController.text.trim();
+    final password = passwordController.text.trim();
+
+    if (employeeId.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter Employee ID and password')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await ApiService.login(employeeId, password);
+
+      if (!mounted) return;
+
+      // Navigate to HomePage and remove Login from the stack
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const HomePage()),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Connection error. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,8 +95,8 @@ class _LoginState extends State<Login> {
                   child: Column(
                     children: [
                       TextFields(
-                        controller: userController,
-                        hinttext: "Enter Username here...",
+                        controller: employeeIdController,
+                        hinttext: "Enter Employee ID...",
                         obscure: false,
                       ),
 
@@ -79,43 +120,18 @@ class _LoginState extends State<Login> {
 
                       SizedBox(height: 20),
 
-                      Buttons(onPressed: () {}, buttonText: "Login"),
+                      // Show spinner while loading, otherwise show Login button
+                      _isLoading
+                          ? const CircularProgressIndicator(
+                              color: Colors.white,
+                            )
+                          : Buttons(
+                              onPressed: _handleLogin,
+                              buttonText: "Login",
+                            ),
 
-                      SizedBox(height: 20),
+                      SizedBox(height: 30),
 
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          Expanded(child: Divider(color: Colors.black45)),
-
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 5),
-                            child: Text("or"),
-                          ),
-
-                          Expanded(child: Divider(color: Colors.black45)),
-                        ],
-                      ),
-
-                      SizedBox(height: 20),
-
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-
-                        children: [
-                          GoogleLoginButton(
-                            onpressed: () {},
-                            buttonType: "google",
-                          ),
-                          SizedBox(width: 10),
-                          GoogleLoginButton(
-                            onpressed: () {},
-                            buttonType: "mac",
-                          ),
-                        ],
-                      ),
-
-                      SizedBox(height: 20),
                       GestureDetector(
                         onTap: () {
                           Navigator.push(

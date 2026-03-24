@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "978137842923",
+    "firebase_url": "https://yash-gxektk.firebaseio.com",
+    "project_id": "yash-gxektk",
+    "storage_bucket": "yash-gxektk.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:978137842923:android:1629f7463ce7a750e22aae",
+        "android_client_info": {
+          "package_name": "com.example.swacchtrack"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "978137842923-tnf78ptg36a433u4agm0ie6a6ftkopst.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwHsVHyDIvPcMeRx0qIHEM3eFcOVSCsvI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "978137842923-403kg2m3ead35g6r9l0i3ojs6gdgqovb.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

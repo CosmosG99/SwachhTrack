@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:swacchtrack/Pages/homepage.dart';
+import 'package:swacchtrack/Pages/login_page.dart';
+import 'package:swacchtrack/services/api_service.dart';
 import 'package:swacchtrack/services/location_services.dart';
 
 void main() async {
@@ -11,17 +13,22 @@ void main() async {
     print('[GPS] LocationService init failed: $e');
   }
 
-  runApp(const MyApp());
+  // Check if user is already logged in
+  final isLoggedIn = await ApiService.isLoggedIn();
+
+  runApp(MyApp(isLoggedIn: isLoggedIn));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final bool isLoggedIn;
+
+  const MyApp({super.key, required this.isLoggedIn});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: HomePage(),
+      home: isLoggedIn ? const HomePage() : const Login(),
     );
   }
 }
