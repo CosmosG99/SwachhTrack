@@ -3,14 +3,17 @@ import 'dart:convert';
 
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:swacchtrack/services/api_service.dart';
 
 class LocationService {
   static Timer? _timer;
   static bool _isRunning = false;
 
+  /// Tracking interval
+  static const Duration _interval = Duration(minutes: 5);
+
   /// No-op initializer (keeps main.dart compatible)
   static Future<void> initialize() async {
-    // Nothing to configure — we use a simple foreground Timer now
     print('[GPS] LocationService initialized');
   }
 
@@ -29,7 +32,7 @@ class LocationService {
         return;
       }
 
-      // 2. Request permission (safe — we are in the foreground)
+      // 2. Request permission
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -41,15 +44,16 @@ class LocationService {
       }
 
       // 3. Fetch first location immediately
-      await _fetchAndLogLocation();
+      await _fetchAndSendLocation();
 
-      // 4. Set up periodic timer (every 10 minutes)
-      _timer = Timer.periodic(const Duration(minutes: 10), (timer) async {
-        await _fetchAndLogLocation();
+      // 4. Set up periodic timer (every 5 minutes)
+      _timer = Timer.periodic(_interval, (timer) async {
+        print('[GPS] ⏱️ Timer tick #${timer.tick} — sending location...');
+        await _fetchAndSendLocation();
       });
 
       _isRunning = true;
-      print('[GPS] Tracking started');
+      print('[GPS] Tracking started (every ${_interval.inMinutes} min)');
     } catch (e) {
       print('[GPS] Error starting tracking: $e');
     }
@@ -66,8 +70,8 @@ class LocationService {
   /// Check if currently tracking
   static bool get isRunning => _isRunning;
 
-  /// Fetch current position and log it
-  static Future<void> _fetchAndLogLocation() async {
+  /// Fetch current position and send to backend
+  static Future<void> _fetchAndSendLocation() async {
     try {
       final locationSettings = LocationSettings(
         accuracy: LocationAccuracy.high,
@@ -78,31 +82,46 @@ class LocationService {
         locationSettings: locationSettings,
       );
 
-      print('[GPS] Latitude: ${position.latitude}, Longitude: ${position.longitude}');
+      print('[GPS] Lat: ${position.latitude}, Lng: ${position.longitude}, '
+          'Accuracy: ${position.accuracy}m, Speed: ${position.speed}');
 
-      await _sendToApi(position.latitude, position.longitude);
+      await _sendToBackend(position);
     } catch (e) {
       print('[GPS] Error fetching location: $e');
     }
   }
 
-  static Future<void> _sendToApi(double lat, double lng) async {
-    const url = "https://your-api.com/location";
-
+  /// Send location to the real backend endpoint
+  static Future<void> _sendToBackend(Position position) async {
     try {
+      final token = await ApiService.getToken();
+      if (token == null) {
+        print('[GPS] No auth token — skipping API send');
+        return;
+      }
+
       final response = await http.post(
-        Uri.parse(url),
-        headers: {"Content-Type": "application/json"},
+        Uri.parse('${ApiService.baseUrl}/tracking/location'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
         body: jsonEncode({
-          "latitude": lat,
-          "longitude": lng,
-          "timestamp": DateTime.now().toIso8601String(),
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'accuracy': position.accuracy,
+          'speed': position.speed,
+          'recorded_at': DateTime.now().toUtc().toIso8601String(),
         }),
       );
 
-      print("[GPS] Location sent to API: ${response.statusCode}");
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        print('[GPS] ✅ Location sent to backend');
+      } else {
+        print('[GPS] ⚠️ Backend responded: ${response.statusCode}');
+      }
     } catch (e) {
-      print("[GPS] API error (non-fatal): $e");
+      print('[GPS] API error (non-fatal): $e');
     }
   }
 }
