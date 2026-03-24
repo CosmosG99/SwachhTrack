@@ -1,32 +1,33 @@
 import React, { useState } from 'react';
-import { Activity, Mail, Lock, LogIn } from 'lucide-react';
+import { Activity, Lock, LogIn, User } from 'lucide-react';
+import { loginUser } from './api';
+import translations from './i18n';
 
-export default function Login({ onLogin, onGoToRegister }) {
-  const [email, setEmail] = useState('');
+export default function Login({ onLogin, lang = 'en', onChangeLang }) {
+  const [employeeId, setEmployeeId] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = (e) => {
+  const t = translations[lang];
+
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
-    
-    if (!email || !password) {
-      setError('Please fill out all fields.');
+
+    if (!employeeId || !password) {
+      setError(t.fillAll);
       return;
     }
-    
+
     setLoading(true);
-    // Simulate networking/authentication delay
-    setTimeout(() => {
-      // Very simple validation logic for demo purposes
-      if (email === 'admin@swachhtrack.com' && password === 'admin') {
-        onLogin();
-      } else {
-        setError('Invalid credentials. Hint: admin@swachhtrack.com / admin');
-        setLoading(false);
-      }
-    }, 1500);
+    try {
+      const data = await loginUser(employeeId, password);
+      onLogin(data.user);
+    } catch (err) {
+      setError(err.message || 'Login failed.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -38,85 +39,55 @@ export default function Login({ onLogin, onGoToRegister }) {
       padding: '1rem'
     }}>
       <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem' }}>
+        {/* Language selector */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+          <select
+            value={lang}
+            onChange={(e) => onChangeLang(e.target.value)}
+            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', padding: '0.4rem 0.8rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'Outfit', outline: 'none' }}
+          >
+            <option value="en" style={{ color: 'black' }}>English</option>
+            <option value="mr" style={{ color: 'black' }}>मराठी</option>
+          </select>
+        </div>
+
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{ 
-            display: 'inline-flex', 
-            background: 'var(--accent-neon)', 
-            padding: '1rem', 
-            borderRadius: '1.25rem', 
-            boxShadow: '0 0 25px var(--accent-glow)', 
-            marginBottom: '1.5rem' 
-          }}>
+          <div style={{ display: 'inline-flex', background: 'var(--accent-neon)', padding: '1rem', borderRadius: '1.25rem', boxShadow: '0 0 25px var(--accent-glow)', marginBottom: '1.5rem' }}>
             <Activity color="white" size={36} />
           </div>
-          <h2 style={{ fontSize: '1.85rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Admin Portal</h2>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem', fontSize: '0.95rem' }}>Access the SwachhTrack Command Center</p>
+          <h2 style={{ fontSize: '1.85rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>{t.portal}</h2>
+          <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem', fontSize: '0.95rem' }}>{t.portalSub}</p>
         </div>
 
         {error && (
-           <div style={{ 
-             background: 'rgba(239, 68, 68, 0.1)', 
-             border: '1px solid rgba(239, 68, 68, 0.3)', 
-             color: '#ef4444', 
-             padding: '0.85rem', 
-             borderRadius: '0.5rem', 
-             marginBottom: '1.5rem', 
-             fontSize: '0.85rem', 
-             textAlign: 'center' 
-           }}>
-             {error}
-           </div>
+          <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', padding: '0.85rem', borderRadius: '0.5rem', marginBottom: '1.5rem', fontSize: '0.85rem', textAlign: 'center' }}>
+            {error}
+          </div>
         )}
 
         <form onSubmit={handleLogin}>
           <div className="form-group" style={{ marginBottom: '1.25rem' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Mail size={16} /> Email Address
+              <User size={16} /> {t.employeeId}
             </label>
-            <input 
-              type="email" 
-              placeholder="e.g. admin@swachhtrack.com" 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={{ width: '100%', padding: '1rem', fontSize: '0.95rem', boxSizing: 'border-box' }}
-            />
+            <input type="text" placeholder="e.g. ADMIN001" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} style={{ width: '100%', padding: '1rem', fontSize: '0.95rem', boxSizing: 'border-box' }} />
           </div>
           <div className="form-group" style={{ marginBottom: '2.25rem' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Lock size={16} /> Password
+              <Lock size={16} /> {t.password}
             </label>
-            <input 
-              type="password" 
-              placeholder="Enter password" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={{ width: '100%', padding: '1rem', fontSize: '0.95rem', boxSizing: 'border-box' }}
-            />
+            <input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: '100%', padding: '1rem', fontSize: '0.95rem', boxSizing: 'border-box' }} />
           </div>
-          
-          <button 
-            type="submit" 
-            className="btn-primary" 
-            style={{ width: '100%', justifyContent: 'center', padding: '1rem', fontSize: '1.05rem', borderRadius: '0.75rem' }}
-            disabled={loading}
-          >
+          <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '1rem', fontSize: '1.05rem', borderRadius: '0.75rem' }} disabled={loading}>
             {loading ? (
-               <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Activity size={20} style={{ animation: 'pulse-pin 1.5s infinite' }} /> Authenticating...
-               </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Activity size={20} style={{ animation: 'pulse-pin 1.5s infinite' }} /> {t.authenticating}
+              </span>
             ) : (
-               <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                 <LogIn size={20} /> Login to Dashboard
-               </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <LogIn size={20} /> {t.loginBtn}
+              </span>
             )}
-          </button>
-
-          <button
-            type="button"
-            className="auth-link-button"
-            onClick={onGoToRegister}
-          >
-            Register a new worker
           </button>
         </form>
       </div>
