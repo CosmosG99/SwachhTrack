@@ -13,7 +13,8 @@ class _QrScannerPageState extends State<QrScannerPage> {
     autoStart: true,
   );
 
-  String scannedData = "Scan a QR code";
+  String scannedData = "Point camera at QR code...";
+  bool _hasScanned = false;
 
   @override
   void dispose() {
@@ -22,19 +23,52 @@ class _QrScannerPageState extends State<QrScannerPage> {
   }
 
   void _onDetect(BarcodeCapture capture) {
+    if (_hasScanned) return; // prevent multiple scans
+
     final barcode = capture.barcodes.first;
 
-    if (barcode.rawValue != null) {
+    if (barcode.rawValue != null && barcode.rawValue!.isNotEmpty) {
+      _hasScanned = true;
+
       setState(() {
         scannedData = barcode.rawValue!;
       });
+
+      // Show confirmation dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text("QR Code Scanned"),
+          content: Text("Use this QR code to check in?\n\nData: ${barcode.rawValue}"),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx); // close dialog
+                setState(() => _hasScanned = false); // allow re-scan
+              },
+              child: const Text("Scan Again"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx); // close dialog
+                Navigator.pop(context, barcode.rawValue); // return QR data to caller
+              },
+              child: const Text("Check In"),
+            ),
+          ],
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("QR Scanner")),
+      appBar: AppBar(
+        title: const Text("Scan Attendance QR"),
+        backgroundColor: Color.fromRGBO(37, 30, 163, 1),
+      ),
       body: Column(
         children: [
           Expanded(
@@ -42,7 +76,11 @@ class _QrScannerPageState extends State<QrScannerPage> {
           ),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Text(scannedData, style: const TextStyle(fontSize: 18)),
+            child: Text(
+              scannedData,
+              style: const TextStyle(fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
           ),
         ],
       ),

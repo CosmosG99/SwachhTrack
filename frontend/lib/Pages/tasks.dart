@@ -2,9 +2,13 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:http/http.dart' as http;
+import 'package:swacchtrack/services/api_service.dart';
+
+// ─────────────────────────────────────────────
+//  MAIN TASKS PAGE — shows list of tasks
+// ─────────────────────────────────────────────
 
 class ProofOfWorkPage extends StatefulWidget {
   const ProofOfWorkPage({super.key});
@@ -15,240 +19,744 @@ class ProofOfWorkPage extends StatefulWidget {
 
 class _ProofOfWorkPageState extends State<ProofOfWorkPage>
     with AutomaticKeepAliveClientMixin {
-  final ImagePicker _picker = ImagePicker();
-
-  List<File> images = [];
+  List<dynamic> _tasks = [];
+  bool _isLoading = true;
+  String? _error;
 
   @override
   bool get wantKeepAlive => true;
 
-  /*
-  -----------------------------
-  TAKE PICTURE
-  -----------------------------
-  */
+  @override
+  void initState() {
+    super.initState();
+    _fetchTasks();
+  }
 
-  Future<void> takePicture() async {
+  Future<void> _fetchTasks() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final data = await ApiService.getTasks();
+      if (mounted) {
+        setState(() {
+          _tasks = data['tasks'] as List<dynamic>? ?? [];
+          _isLoading = false;
+        });
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to load tasks. Check connection.';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Color _priorityColor(String? priority) {
+    switch (priority) {
+      case 'critical':
+        return Colors.red;
+      case 'high':
+        return Colors.orange;
+      case 'medium':
+        return Colors.blue;
+      case 'low':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Color _statusColor(String? status) {
+    switch (status) {
+      case 'not_started':
+        return Colors.grey;
+      case 'in_progress':
+        return Colors.orange;
+      case 'completed':
+        return Colors.blue;
+      case 'accepted':
+        return Colors.green;
+      case 'rejected':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _statusLabel(String? status) {
+    switch (status) {
+      case 'not_started':
+        return 'Not Started';
+      case 'in_progress':
+        return 'In Progress';
+      case 'completed':
+        return 'Completed';
+      case 'accepted':
+        return 'Accepted ✅';
+      case 'rejected':
+        return 'Rejected ❌';
+      default:
+        return status ?? 'Unknown';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 10),
+              Text(_error!, textAlign: TextAlign.center),
+              const SizedBox(height: 20),
+              ElevatedButton(onPressed: _fetchTasks, child: const Text("Retry")),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_tasks.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.task_alt, size: 64, color: Colors.grey),
+            const SizedBox(height: 10),
+            const Text("No tasks assigned yet",
+                style: TextStyle(fontSize: 16, color: Colors.grey)),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _fetchTasks,
+              child: const Text("Refresh"),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _fetchTasks,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: _tasks.length,
+        itemBuilder: (context, index) {
+          final task = _tasks[index];
+          final priority = task['priority'] as String? ?? 'medium';
+          final status = task['status'] as String? ?? 'not_started';
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: _priorityColor(priority).withAlpha(80)),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => TaskDetailPage(
+                      taskId: task['id'].toString(),
+                    ),
+                  ),
+                );
+                // Refresh list when coming back
+                _fetchTasks();
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title + Priority badge
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            task['title'] ?? 'Untitled',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: _priorityColor(priority).withAlpha(30),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: _priorityColor(priority).withAlpha(120)),
+                          ),
+                          child: Text(
+                            priority.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: _priorityColor(priority),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 6),
+
+                    // Type
+                    if (task['type'] != null)
+                      Text(
+                        'Type: ${task['type']}',
+                        style: TextStyle(
+                            fontSize: 13, color: Colors.grey[600]),
+                      ),
+
+                    const SizedBox(height: 8),
+
+                    // Status badge
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _statusColor(status),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _statusLabel(status),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        Icon(Icons.chevron_right, color: Colors.grey[400]),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+//  TASK DETAIL PAGE
+// ─────────────────────────────────────────────
+
+class TaskDetailPage extends StatefulWidget {
+  final String taskId;
+  const TaskDetailPage({super.key, required this.taskId});
+
+  @override
+  State<TaskDetailPage> createState() => _TaskDetailPageState();
+}
+
+class _TaskDetailPageState extends State<TaskDetailPage> {
+  Map<String, dynamic>? _task;
+  bool _isLoading = true;
+  bool _isUpdating = false;
+  String? _error;
+
+  // Proof of work
+  final ImagePicker _picker = ImagePicker();
+  File? _proofImage;
+  final TextEditingController _notesController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchTask();
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchTask() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final data = await ApiService.getTask(widget.taskId);
+      if (mounted) {
+        setState(() {
+          _task = data['task'];
+          _isLoading = false;
+        });
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to load task details.';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// Start the task: not_started → in_progress
+  Future<void> _startTask() async {
+    setState(() => _isUpdating = true);
+
+    try {
+      final result = await ApiService.updateTaskStatus(
+        taskId: widget.taskId,
+        status: 'in_progress',
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['message'] ?? 'Task started!')),
+      );
+
+      _fetchTask(); // Refresh
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error starting task')),
+      );
+    } finally {
+      if (mounted) setState(() => _isUpdating = false);
+    }
+  }
+
+  /// Take proof photo
+  Future<void> _takeProofPhoto() async {
     final XFile? photo = await _picker.pickImage(
       source: ImageSource.camera,
       imageQuality: 70,
     );
 
     if (photo == null) return;
-
-    final directory = await getApplicationDocumentsDirectory();
-
-    final String newPath =
-        '${directory.path}/${DateTime.now().millisecondsSinceEpoch}.jpg';
-
-    final File newImage = await File(photo.path).copy(newPath);
-
     setState(() {
-      images.add(newImage);
+      _proofImage = File(photo.path);
     });
   }
 
-  /*
-  -----------------------------
-  REMOVE IMAGE
-  -----------------------------
-  */
-
-  Future<void> removeImage(int index) async {
-    await images[index].delete();
-
-    setState(() {
-      images.removeAt(index);
-    });
-  }
-
-  /*
-  -----------------------------
-  CONVERT TO BASE64
-  -----------------------------
-  */
-
-  Future<List<String>> convertImagesToBase64() async {
-    List<String> base64Images = [];
-
-    for (File image in images) {
-      List<int> bytes = await image.readAsBytes();
-
-      String base64String = base64Encode(bytes);
-
-      base64Images.add(base64String);
-    }
-
-    return base64Images;
-  }
-
-  /*
-  -----------------------------
-  SEND PROOF
-  -----------------------------
-  */
-
-  Future<void> sendProof() async {
-    if (images.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Add at least one photo")));
-      return;
-    }
+  /// Complete task with proof
+  Future<void> _completeTask() async {
+    setState(() => _isUpdating = true);
 
     try {
-      /*
-      Convert images
-      */
+      // Convert proof image to base64 if available
+      String? base64Image;
+      if (_proofImage != null) {
+        final bytes = await _proofImage!.readAsBytes();
+        base64Image = base64Encode(bytes);
+      }
 
-      List<String> base64Images = await convertImagesToBase64();
+      // Get GPS location for proof
+      double? lat, lng;
+      try {
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings:
+              const LocationSettings(accuracy: LocationAccuracy.high),
+        );
+        lat = position.latitude;
+        lng = position.longitude;
+      } catch (_) {
+        // GPS is optional for task completion
+      }
 
-      print("Converted ${base64Images.length} images");
-
-      /*
-      Send to backend
-      */
-
-      final response = await http.post(
-        Uri.parse("http://100.109.17.44:3000/upload"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"images": base64Images}),
+      final result = await ApiService.updateTaskStatus(
+        taskId: widget.taskId,
+        status: 'completed',
+        proofImage: base64Image,
+        proofNotes: _notesController.text.isNotEmpty
+            ? _notesController.text
+            : null,
+        latitude: lat,
+        longitude: lng,
       );
 
-      /*
-      Success
-      */
+      if (!mounted) return;
 
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Proof sent successfully")),
-        );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['message'] ?? 'Task completed!')),
+      );
 
-        /*
-        Optional: clear images after send
-        */
-
-        setState(() {
-          images.clear();
-        });
-      }
-      /*
-      Failure
-      */
-      else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Failed to send proof: ${response.statusCode}"),
-          ),
-        );
-      }
+      _fetchTask(); // Refresh to show updated status
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
     } catch (e) {
-      print("Error sending proof: $e");
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Error sending proof")));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error completing task')),
+      );
+    } finally {
+      if (mounted) setState(() => _isUpdating = false);
     }
   }
 
-  /*
-  -----------------------------
-  UI
-  -----------------------------
-  */
+  Color _priorityColor(String? priority) {
+    switch (priority) {
+      case 'critical':
+        return Colors.red;
+      case 'high':
+        return Colors.orange;
+      case 'medium':
+        return Colors.blue;
+      case 'low':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Color _statusColor(String? status) {
+    switch (status) {
+      case 'not_started':
+        return Colors.grey;
+      case 'in_progress':
+        return Colors.orange;
+      case 'completed':
+        return Colors.blue;
+      case 'accepted':
+        return Colors.green;
+      case 'rejected':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Widget _buildInfoTile(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(label,
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.grey[700])),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Task Details"),
+        backgroundColor: Color.fromRGBO(37, 30, 163, 1),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_error!),
+                      const SizedBox(height: 10),
+                      ElevatedButton(
+                          onPressed: _fetchTask,
+                          child: const Text("Retry")),
+                    ],
+                  ),
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Title
+                      Text(
+                        _task?['title'] ?? 'Untitled',
+                        style: const TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
 
-    return Padding(
-      padding: const EdgeInsets.all(15),
-      child: Column(
-        children: [
-          Expanded(
-            child: images.isEmpty
-                ? const Center(
-                    child: Text(
-                      "No proof uploaded yet",
-                      style: TextStyle(fontSize: 16),
-                    ),
-                  )
-                : GridView.builder(
-                    itemCount: images.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                        ),
-                    itemBuilder: (context, index) {
-                      return Stack(
+                      const SizedBox(height: 12),
+
+                      // Status + Priority row
+                      Row(
                         children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.file(
-                              images[index],
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              height: double.infinity,
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: _statusColor(_task?['status']),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              (_task?['status'] ?? 'unknown')
+                                  .toString()
+                                  .replaceAll('_', ' ')
+                                  .toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
-                          Positioned(
-                            top: 5,
-                            right: 5,
-                            child: GestureDetector(
-                              onTap: () => removeImage(index),
-                              child: Container(
-                                decoration: const BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
-                                ),
-                                padding: const EdgeInsets.all(6),
-                                child: const Icon(
-                                  Icons.close,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: _priorityColor(_task?['priority'])
+                                  .withAlpha(30),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                  color: _priorityColor(_task?['priority'])),
+                            ),
+                            child: Text(
+                              (_task?['priority'] ?? 'medium').toUpperCase(),
+                              style: TextStyle(
+                                color: _priorityColor(_task?['priority']),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
                               ),
                             ),
                           ),
                         ],
-                      );
-                    },
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Description
+                      if (_task?['description'] != null &&
+                          _task!['description'].toString().isNotEmpty) ...[
+                        const Text("Description",
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 6),
+                        Text(_task!['description']),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Details
+                      const Divider(),
+                      _buildInfoTile("Type", _task?['type'] ?? 'N/A'),
+                      _buildInfoTile("Assigned by",
+                          _task?['assigned_by_name'] ?? 'N/A'),
+                      if (_task?['due_date'] != null)
+                        _buildInfoTile("Due date",
+                            _task!['due_date'].toString().substring(0, 10)),
+                      if (_task?['supervisor_comment'] != null)
+                        _buildInfoTile(
+                            "Review", _task!['supervisor_comment']),
+                      const Divider(),
+
+                      const SizedBox(height: 16),
+
+                      // Action section based on status
+                      _buildActionSection(),
+                    ],
                   ),
+                ),
+    );
+  }
+
+  Widget _buildActionSection() {
+    final status = _task?['status'] as String?;
+
+    // Task can be started
+    if (status == 'not_started' || status == 'rejected') {
+      return SizedBox(
+        width: double.infinity,
+        height: 55,
+        child: ElevatedButton.icon(
+          onPressed: _isUpdating ? null : _startTask,
+          icon: _isUpdating
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.play_arrow, color: Colors.white),
+          label: Text(
+            status == 'rejected' ? "Restart Task" : "Start Task",
+            style: const TextStyle(fontSize: 18, color: Colors.white),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Task is in progress — show proof upload + complete
+    if (status == 'in_progress') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Complete Task with Proof",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+
+          // Proof image preview / take photo
+          if (_proofImage != null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.file(
+                _proofImage!,
+                height: 200,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: _takeProofPhoto,
+              icon: const Icon(Icons.camera_alt),
+              label: const Text("Retake Photo"),
+            ),
+          ] else ...[
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton.icon(
+                onPressed: _takeProofPhoto,
+                icon: const Icon(Icons.camera_alt),
+                label: const Text("Take Proof Photo"),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 12),
+
+          // Notes
+          TextField(
+            controller: _notesController,
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: "Add notes (optional)...",
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
 
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
 
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 55,
-                  child: ElevatedButton.icon(
-                    onPressed: takePicture,
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text("Add Proof"),
-                  ),
+          // Complete button
+          SizedBox(
+            width: double.infinity,
+            height: 55,
+            child: ElevatedButton.icon(
+              onPressed: _isUpdating ? null : _completeTask,
+              icon: _isUpdating
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.check_circle, color: Colors.white),
+              label: const Text(
+                "Mark as Complete",
+                style: TextStyle(fontSize: 18, color: Colors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Color.fromRGBO(37, 30, 163, 1),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
-
-              const SizedBox(width: 10),
-
-              Expanded(
-                child: SizedBox(
-                  height: 55,
-                  child: ElevatedButton.icon(
-                    onPressed: sendProof,
-                    icon: const Icon(Icons.send),
-                    label: const Text("Send"),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ],
-      ),
-    );
+      );
+    }
+
+    // Task completed / accepted / rejected — show info
+    if (status == 'completed') {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.blue.withAlpha(20),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue.withAlpha(80)),
+        ),
+        child: const Text(
+          "⏳ Task completed. Awaiting supervisor review.",
+          style: TextStyle(fontSize: 15),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    if (status == 'accepted') {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.green.withAlpha(20),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.green.withAlpha(80)),
+        ),
+        child: const Text(
+          "✅ Task accepted by supervisor!",
+          style: TextStyle(fontSize: 15, color: Colors.green),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 }
