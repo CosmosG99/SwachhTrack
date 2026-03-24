@@ -27,11 +27,14 @@ class _HomeState extends State<Home> {
             child: ElevatedButton(
               onPressed: () async {
                 if (!checkInStatus) {
-                  await LocationService.start();
-
-                  setState(() {
-                    checkInStatus = true;
-                  });
+                  try {
+                    await LocationService.start();
+                    setState(() {
+                      checkInStatus = true;
+                    });
+                  } catch (e) {
+                    print('[GPS] Check-in error: $e');
+                  }
                 }
               },
               style: ElevatedButton.styleFrom(

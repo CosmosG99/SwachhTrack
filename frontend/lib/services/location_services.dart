@@ -1,93 +1,92 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui';
 
-import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:flutter_background_service/flutter_background_service.dart'
-    show ServiceInstance;
-import 'package:flutter_background_service/flutter_background_service.dart'
-    show AndroidServiceInstance;
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
 class LocationService {
-  static final FlutterBackgroundService _service = FlutterBackgroundService();
+  static Timer? _timer;
+  static bool _isRunning = false;
 
-  /// Initialize once in main()
+  /// No-op initializer (keeps main.dart compatible)
   static Future<void> initialize() async {
-    await _service.configure(
-      androidConfiguration: AndroidConfiguration(
-        onStart: onStart,
-        autoStart: false,
-        isForegroundMode: true,
-        foregroundServiceNotificationId: 888,
-      ),
-      iosConfiguration: IosConfiguration(),
-    );
+    // Nothing to configure — we use a simple foreground Timer now
+    print('[GPS] LocationService initialized');
   }
 
-  /// Start tracking
+  /// Start tracking: requests permission, fetches first location, starts timer
   static Future<void> start() async {
-    await _service.startService();
+    if (_isRunning) {
+      print('[GPS] Already running');
+      return;
+    }
+
+    try {
+      // 1. Check if location services are enabled
+      bool enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) {
+        print('[GPS] Location services are DISABLED');
+        return;
+      }
+
+      // 2. Request permission (safe — we are in the foreground)
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        print('[GPS] Permission denied: $permission');
+        return;
+      }
+
+      // 3. Fetch first location immediately
+      await _fetchAndLogLocation();
+
+      // 4. Set up periodic timer (every 10 minutes)
+      _timer = Timer.periodic(const Duration(minutes: 10), (timer) async {
+        await _fetchAndLogLocation();
+      });
+
+      _isRunning = true;
+      print('[GPS] Tracking started');
+    } catch (e) {
+      print('[GPS] Error starting tracking: $e');
+    }
   }
 
   /// Stop tracking
   static void stop() {
-    _service.invoke("stopService");
+    _timer?.cancel();
+    _timer = null;
+    _isRunning = false;
+    print('[GPS] Tracking stopped');
   }
 
-  @pragma('vm:entry-point')
-  static void onStart(ServiceInstance service) async {
-    DartPluginRegistrant.ensureInitialized();
+  /// Check if currently tracking
+  static bool get isRunning => _isRunning;
 
-    /// VERY IMPORTANT
-    /// Notification must be set immediately
-    if (service is AndroidServiceInstance) {
-      await service.setForegroundNotificationInfo(
-        title: "GPS Tracking Active",
-        content: "Sending location every 10 minutes",
+  /// Fetch current position and log it
+  static Future<void> _fetchAndLogLocation() async {
+    try {
+      final locationSettings = LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 0,
       );
+
+      Position position = await Geolocator.getCurrentPosition(
+        locationSettings: locationSettings,
+      );
+
+      print('[GPS] Latitude: ${position.latitude}, Longitude: ${position.longitude}');
+
+      await _sendToApi(position.latitude, position.longitude);
+    } catch (e) {
+      print('[GPS] Error fetching location: $e');
     }
-
-    /// Stop listener
-    service.on("stopService").listen((event) {
-      service.stopSelf();
-    });
-
-    /// Run every 10 minutes
-    Timer.periodic(const Duration(minutes: 10), (timer) async {
-      await sendLocation();
-    });
   }
 
-  static Future<void> sendLocation() async {
-    bool enabled = await Geolocator.isLocationServiceEnabled();
-
-    if (!enabled) return;
-
-    LocationPermission permission = await Geolocator.checkPermission();
-
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      return;
-    }
-
-    final locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 0,
-    );
-
-    Position position = await Geolocator.getCurrentPosition(
-      locationSettings: locationSettings,
-    );
-
-    await sendToApi(position.latitude, position.longitude);
-  }
-
-  static Future<void> sendToApi(double lat, double lng) async {
+  static Future<void> _sendToApi(double lat, double lng) async {
     const url = "https://your-api.com/location";
 
     try {
@@ -101,9 +100,9 @@ class LocationService {
         }),
       );
 
-      print("Location sent: ${response.statusCode}");
+      print("[GPS] Location sent to API: ${response.statusCode}");
     } catch (e) {
-      print("API error: $e");
+      print("[GPS] API error (non-fatal): $e");
     }
   }
 }

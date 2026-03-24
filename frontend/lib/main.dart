@@ -5,7 +5,11 @@ import 'package:swacchtrack/services/location_services.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await LocationService.initialize();
+  try {
+    await LocationService.initialize();
+  } catch (e) {
+    print('[GPS] LocationService init failed: $e');
+  }
 
   runApp(const MyApp());
 }
