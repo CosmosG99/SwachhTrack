@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Activity, Mail, Lock, LogIn } from 'lucide-react';
 
-export default function Login({ onLogin }) {
+export default function Login({ onLogin, onGoToRegister }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -109,6 +109,14 @@ export default function Login({ onLogin }) {
                  <LogIn size={20} /> Login to Dashboard
                </span>
             )}
+          </button>
+
+          <button
+            type="button"
+            className="auth-link-button"
+            onClick={onGoToRegister}
+          >
+            Register a new worker
           </button>
         </form>
       </div>

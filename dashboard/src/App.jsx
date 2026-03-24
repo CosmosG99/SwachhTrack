@@ -12,6 +12,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import Login from './Login';
+import WorkerRegister from './WorkerRegister';
 
 // --- MOCK DATA ---
 const topMetrics = [
@@ -66,6 +67,7 @@ const initialWorkers = [
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authView, setAuthView] = useState('login');
   const [workersList, setWorkersList] = useState(initialWorkers);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newWorker, setNewWorker] = useState({
@@ -103,7 +105,14 @@ function App() {
   };
 
   if (!isAuthenticated) {
-    return <Login onLogin={() => setIsAuthenticated(true)} />;
+    return authView === 'login' ? (
+      <Login
+        onLogin={() => setIsAuthenticated(true)}
+        onGoToRegister={() => setAuthView('register')}
+      />
+    ) : (
+      <WorkerRegister onBackToLogin={() => setAuthView('login')} />
+    );
   }
 
   return (
