@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:swacchtrack/Pages/login_page.dart';
+import 'package:swacchtrack/Pages/homepage.dart';
+import 'package:swacchtrack/services/location_services.dart';
 
-void main() {
-  runApp(MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await LocationService.initialize();
+
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -10,6 +15,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(debugShowCheckedModeBanner: false, home: Login());
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: HomePage(),
+    );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:maps/Util/buttons.dart';
-import 'package:maps/Util/text_field.dart';
+import 'package:swacchtrack/Pages/signup_page.dart';
+import 'package:swacchtrack/Util/buttons.dart';
+import 'package:swacchtrack/Util/textfields.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -112,6 +113,25 @@ class _LoginState extends State<Login> {
                             buttonType: "mac",
                           ),
                         ],
+                      ),
+
+                      SizedBox(height: 20),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SignupPage(),
+                            ),
+                          );
+                        },
+                        child: SizedBox(
+                          width: MediaQuery.sizeOf(context).width,
+                          child: Text(
+                            "Register new account",
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
                       ),
                     ],
                   ),
