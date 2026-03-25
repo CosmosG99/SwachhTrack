@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:swacchtrack/utils/language_provider.dart';
 
 class QrScannerPage extends StatefulWidget {
   const QrScannerPage({super.key});
@@ -13,7 +14,14 @@ class _QrScannerPageState extends State<QrScannerPage> {
     autoStart: true,
   );
 
-  String scannedData = "Point camera at QR code...";
+  String scannedData = "";
+
+  @override
+  void initState() {
+    super.initState();
+    scannedData = t('point_camera');
+  }
+
   bool _hasScanned = false;
 
   @override
@@ -39,22 +47,22 @@ class _QrScannerPageState extends State<QrScannerPage> {
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
-          title: const Text("QR Code Scanned"),
-          content: Text("Use this QR code to check in?\n\nData: ${barcode.rawValue}"),
+          title: Text(t('qr_scanned')),
+          content: Text("${t('use_qr_checkin')}\n\n${t('data_label')} ${barcode.rawValue}"),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.pop(ctx); // close dialog
                 setState(() => _hasScanned = false); // allow re-scan
               },
-              child: const Text("Scan Again"),
+              child: Text(t('scan_again')),
             ),
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(ctx); // close dialog
                 Navigator.pop(context, barcode.rawValue); // return QR data to caller
               },
-              child: const Text("Check In"),
+              child: Text(t('check_in_btn')),
             ),
           ],
         ),
@@ -66,8 +74,8 @@ class _QrScannerPageState extends State<QrScannerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Scan Attendance QR"),
-        backgroundColor: Color.fromRGBO(37, 30, 163, 1),
+        title: Text(t('scan_attendance_qr')),
+        backgroundColor: const Color.fromRGBO(37, 30, 163, 1),
       ),
       body: Column(
         children: [

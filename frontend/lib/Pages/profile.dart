@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:swacchtrack/Pages/login_page.dart';
 import 'package:swacchtrack/services/api_service.dart';
+import 'package:swacchtrack/utils/language_provider.dart';
 
 class Profile extends StatefulWidget {
   const Profile({super.key});
@@ -196,16 +197,50 @@ class _ProfileState extends State<Profile> {
 
             const SizedBox(height: 28),
 
-            _buildInfoRow("Employee ID", employeeId),
+            _buildInfoRow(t('employee_id'), employeeId),
             const SizedBox(height: 16),
 
-            _buildInfoRow("Phone", phone),
+            _buildInfoRow(t('phone'), phone),
             const SizedBox(height: 16),
 
-            _buildInfoRow("Email", email),
+            _buildInfoRow(t('email'), email),
             const SizedBox(height: 16),
 
-            _buildInfoRow("Department", department),
+            _buildInfoRow(t('department'), department),
+            
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(t('language'), style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                  ValueListenableBuilder<String>(
+                    valueListenable: languageProvider,
+                    builder: (context, lang, child) {
+                      return DropdownButton<String>(
+                        value: lang,
+                        dropdownColor: const Color.fromARGB(255, 37, 30, 163),
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                        underline: const SizedBox(),
+                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white70),
+                        items: [
+                          DropdownMenuItem(value: 'en', child: Text(t('english'))),
+                          DropdownMenuItem(value: 'mr', child: Text(t('marathi'))),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) languageProvider.setLanguage(val);
+                        },
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
 
             const Spacer(),
 
@@ -216,9 +251,9 @@ class _ProfileState extends State<Profile> {
               child: ElevatedButton.icon(
                 onPressed: _handleLogout,
                 icon: const Icon(Icons.logout, color: Colors.white),
-                label: const Text(
-                  "Logout",
-                  style: TextStyle(
+                label: Text(
+                  t('logout'),
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 19,
                     fontWeight: FontWeight.w600,

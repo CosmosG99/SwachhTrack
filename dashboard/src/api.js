@@ -122,3 +122,22 @@ export async function generateQrCode(geofenceId) {
 export async function fetchLiveLocations() {
   return apiFetch('/tracking/live');
 }
+
+// --- Task Assignment endpoint ---
+export async function createTask(taskData) {
+  return apiFetch('/tasks', {
+    method: 'POST',
+    body: JSON.stringify(taskData),
+  });
+}
+
+export async function fetchTasks(query = '') {
+  return apiFetch(`/tasks${query ? `?${query}` : ''}`);
+}
+
+export async function reviewTask(taskId, decision, comment = '') {
+  return apiFetch(`/tasks/${taskId}/review`, {
+    method: 'PUT',
+    body: JSON.stringify({ decision, supervisor_comment: comment }),
+  });
+}

@@ -21,7 +21,7 @@ import {
   fetchWorkerPerformance, fetchLiveLocations,
   fetchGeofences, generateQrCode, registerWorker,
   fetchAttendanceReport, fetchRecentActivity, fetchHeatmap,
-  apiFetch
+  apiFetch, createTask, fetchTasks, reviewTask
 } from './api';
 
 const customPinIcon = new L.DivIcon({
@@ -54,6 +54,8 @@ function App() {
   const [attendanceReport, setAttendanceReport] = useState(null);
   const [recentActivity, setRecentActivity] = useState([]);
   const [heatmapData, setHeatmapData] = useState([]);
+  const [allTasks, setAllTasks] = useState([]);
+  const [pendingReviews, setPendingReviews] = useState([]);
   const [dashLoading, setDashLoading] = useState(true);
 
   // QR Modal
@@ -69,6 +71,19 @@ function App() {
   const [regForm, setRegForm] = useState({ employee_id: '', name: '', email: '', phone: '', password: '', role: 'worker', department: '', ward_id: '' });
   const [regLoading, setRegLoading] = useState(false);
   const [regMsg, setRegMsg] = useState({ type: '', text: '' });
+
+  // Assign Task Modal
+  const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [assignForm, setAssignForm] = useState({ title: '', description: '', type: 'sweeping', priority: 'medium', assigned_to: '', due_date: '', latitude: '', longitude: '' });
+  const [assignLoading, setAssignLoading] = useState(false);
+  const [assignMsg, setAssignMsg] = useState({ type: '', text: '' });
+
+  // Review Modal
+  const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [reviewTaskItem, setReviewTaskItem] = useState(null);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewMsg, setReviewMsg] = useState({ type: '', text: '' });
 
   const t = translations[lang];
 
@@ -118,6 +133,7 @@ function App() {
         fetchAttendanceReport(),
         fetchRecentActivity(15),
         fetchHeatmap(),
+        fetchTasks('limit=10000'),
       ]);
 
       if (results[0].status === 'fulfilled') setOverview(results[0].value.overview);
@@ -131,6 +147,11 @@ function App() {
       if (results[5].status === 'fulfilled') setAttendanceReport(results[5].value);
       if (results[6].status === 'fulfilled') setRecentActivity(results[6].value.activities || []);
       if (results[7].status === 'fulfilled') setHeatmapData(results[7].value.heatmap || []);
+      if (results[8] && results[8].status === 'fulfilled') {
+        const tasks = results[8].value.tasks || [];
+        setAllTasks(tasks);
+        setPendingReviews(tasks.filter(t => t.status === 'completed'));
+      }
     } catch (err) {
       console.error('Dashboard load error:', err);
     } finally {
@@ -202,6 +223,49 @@ function App() {
       setRegMsg({ type: 'error', text: err.message });
     } finally {
       setRegLoading(false);
+    }
+  };
+
+  // Assign Task Handler
+  const handleAssignTask = async (e) => {
+    e.preventDefault();
+    setAssignLoading(true);
+    setAssignMsg({ type: '', text: '' });
+    try {
+      const payload = { ...assignForm };
+      payload.assigned_by = currentUser?.id || null;
+      if (!payload.latitude) delete payload.latitude;
+      if (!payload.longitude) delete payload.longitude;
+      if (payload.latitude) payload.latitude = parseFloat(payload.latitude);
+      if (payload.longitude) payload.longitude = parseFloat(payload.longitude);
+      if (!payload.due_date) delete payload.due_date;
+
+      await createTask(payload);
+      setAssignMsg({ type: 'success', text: 'Task successfully assigned!' });
+      setAssignForm({ title: '', description: '', type: 'sweeping', priority: 'medium', assigned_to: '', due_date: '', latitude: '', longitude: '' });
+      loadDashboard();
+    } catch (err) {
+      setAssignMsg({ type: 'error', text: err.message });
+    } finally {
+      setAssignLoading(false);
+    }
+  };
+
+  // Review Task Handler
+  const handleReviewSubmit = async (decision) => {
+    setReviewLoading(true);
+    setReviewMsg({ type: '', text: '' });
+    try {
+      await reviewTask(reviewTaskItem.id, decision, reviewComment);
+      setReviewMsg({ type: 'success', text: `Task successfully ${decision}!` });
+      setTimeout(() => {
+        setIsReviewOpen(false);
+        setReviewMsg({ type: '', text: '' });
+        loadDashboard(); // reload tasks
+      }, 1500);
+    } catch (error) {
+      setReviewMsg({ type: 'error', text: error.message });
+      setReviewLoading(false);
     }
   };
 
@@ -359,6 +423,150 @@ function App() {
         </div>
       )}
 
+      {/* ASSIGN TASK MODAL */}
+      {isAssignOpen && (
+        <div className="modal-overlay" style={{ zIndex: 1000 }}>
+          <div className="modal-content" style={{ maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h2 style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><ClipboardList size={22} /> Assign Task</span>
+              <X style={{ cursor: 'pointer', color: 'var(--text-secondary)' }} onClick={() => { setIsAssignOpen(false); setAssignMsg({ type: '', text: '' }); }} />
+            </h2>
+
+            {assignMsg.text && (
+              <div style={{ background: assignMsg.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(52,211,153,0.1)', color: assignMsg.type === 'error' ? '#ef4444' : '#34d399', padding: '0.85rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem', border: `1px solid ${assignMsg.type === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(52,211,153,0.3)'}` }}>
+                {assignMsg.text}
+              </div>
+            )}
+
+            <form onSubmit={handleAssignTask}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
+                <div className="form-group">
+                  <label>Title *</label>
+                  <input value={assignForm.title} onChange={e => setAssignForm({ ...assignForm, title: e.target.value })} placeholder="e.g. Clean main street" required />
+                </div>
+                <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label>Type *</label>
+                      <select value={assignForm.type} onChange={e => setAssignForm({ ...assignForm, type: e.target.value })}>
+                        <option value="sweeping">Sweeping</option>
+                        <option value="waste_collection">Waste Collection</option>
+                        <option value="drainage">Drain Cleaning</option>
+                        <option value="road_repair">Road Repair</option>
+                        <option value="inspection">Inspection</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label>Priority *</label>
+                      <select value={assignForm.priority} onChange={e => setAssignForm({ ...assignForm, priority: e.target.value })}>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                      </select>
+                    </div>
+                </div>
+                <div className="form-group">
+                  <label>Assign To (Worker) *</label>
+                  <select value={assignForm.assigned_to} onChange={e => setAssignForm({ ...assignForm, assigned_to: e.target.value })} required>
+                    <option value="" disabled>Select a worker</option>
+                    {workers.map(w => <option key={w.id} value={w.id}>{w.name} ({w.employee_id})</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Due Date</label>
+                  <input type="date" value={assignForm.due_date} onChange={e => setAssignForm({ ...assignForm, due_date: e.target.value })} />
+                </div>
+                <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label>Latitude (optional)</label>
+                    <input type="number" step="any" value={assignForm.latitude} onChange={e => setAssignForm({ ...assignForm, latitude: e.target.value })} placeholder="15.89" />
+                  </div>
+                  <div>
+                    <label>Longitude (optional)</label>
+                    <input type="number" step="any" value={assignForm.longitude} onChange={e => setAssignForm({ ...assignForm, longitude: e.target.value })} placeholder="73.81" />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Description</label>
+                  <textarea value={assignForm.description} onChange={e => setAssignForm({ ...assignForm, description: e.target.value })} placeholder="Task Details..." style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', background: '#18181b', color: 'white', border: '1px solid #27272a' }} rows={3}></textarea>
+                </div>
+              </div>
+              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
+                <button type="button" onClick={() => { setIsAssignOpen(false); setAssignMsg({ type: '', text: '' }); }} style={{ background: 'transparent', color: 'white', border: '1px solid var(--border-color)', borderRadius: '0.5rem', cursor: 'pointer', padding: '0.65rem 1.25rem' }}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={assignLoading} style={{ padding: '0.65rem 1.5rem' }}>{assignLoading ? 'Assigning...' : 'Assign Task'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* REVIEW TASK MODAL */}
+      {isReviewOpen && reviewTaskItem && (
+        <div className="modal-overlay" style={{ zIndex: 1000 }}>
+          <div className="modal-content" style={{ maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h2 style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><CheckCircle2 size={22} /> Review Task Completion</span>
+              <X style={{ cursor: 'pointer', color: 'var(--text-secondary)' }} onClick={() => setIsReviewOpen(false)} />
+            </h2>
+            
+            {reviewMsg.text && (
+              <div style={{ background: reviewMsg.type === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(52,211,153,0.1)', color: reviewMsg.type === 'error' ? '#ef4444' : '#34d399', padding: '0.85rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem', border: `1px solid ${reviewMsg.type === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(52,211,153,0.3)'}` }}>
+                {reviewMsg.text}
+              </div>
+            )}
+
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1.5rem' }}>
+              <div style={{ marginBottom: '0.5rem' }}><strong>Title:</strong> {reviewTaskItem.title}</div>
+              <div style={{ marginBottom: '0.5rem' }}><strong>Worker:</strong> {reviewTaskItem.worker_name} ({reviewTaskItem.worker_employee_id})</div>
+              <div style={{ marginBottom: '0.5rem' }}><strong>Notes:</strong> {reviewTaskItem.proof_notes || 'None'}</div>
+              {reviewTaskItem.proof_latitude && (
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <strong>Location recorded:</strong> {reviewTaskItem.proof_latitude}, {reviewTaskItem.proof_longitude} 
+                  <a href={`https://www.google.com/maps?q=${reviewTaskItem.proof_latitude},${reviewTaskItem.proof_longitude}`} target="_blank" style={{ color: '#60a5fa', marginLeft: '0.5rem' }} rel="noreferrer">Open Map📍</a>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+              {reviewTaskItem.proof_image ? (
+                <img 
+                  src={reviewTaskItem.proof_image.startsWith('data:') ? reviewTaskItem.proof_image : `data:image/jpeg;base64,${reviewTaskItem.proof_image}`} 
+                  alt="Proof" 
+                  style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid #3f3f46' }} 
+                />
+              ) : (
+                <div style={{ padding: '3rem', border: '1px dashed #3f3f46', borderRadius: '0.5rem', color: 'var(--text-secondary)' }}>No proof image provided</div>
+              )}
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+              <label>Supervisor Comments (Optional)</label>
+              <textarea value={reviewComment} onChange={e => setReviewComment(e.target.value)} placeholder="Provide feedback to the worker..." style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', background: '#18181b', color: 'white', border: '1px solid #27272a' }} rows={2}></textarea>
+            </div>
+
+            {!reviewMsg.text || reviewMsg.type === 'error' ? (
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <button 
+                  onClick={() => handleReviewSubmit('rejected')} 
+                  disabled={reviewLoading}
+                  style={{ flex: 1, padding: '0.75rem', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.5rem', cursor: reviewLoading ? 'not-allowed' : 'pointer', fontWeight: 600 }}
+                >
+                  {reviewLoading ? 'Processing...' : 'Reject & Restart ❌'}
+                </button>
+                <button 
+                  onClick={() => handleReviewSubmit('accepted')} 
+                  disabled={reviewLoading}
+                  style={{ flex: 1, padding: '0.75rem', background: '#34d399', color: '#000', border: 'none', borderRadius: '0.5rem', cursor: reviewLoading ? 'not-allowed' : 'pointer', fontWeight: 600 }}
+                >
+                  {reviewLoading ? 'Processing...' : 'Accept Task ✅'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+
       {/* HEADER */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -380,6 +588,9 @@ function App() {
           <button onClick={handleOpenQrModal} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', color: 'white', padding: '0.6rem 1rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontFamily: 'Outfit' }}>
             <QrCode size={18} /> {t.genQR}
           </button>
+          <button className="btn-primary" onClick={() => setIsAssignOpen(true)} style={{ background: '#60a5fa', color: '#000' }}>
+            <ClipboardList size={18} /> Assign Task
+          </button>
           <button className="btn-primary" onClick={() => setIsRegisterOpen(true)}>
             <UserPlus size={18} /> {t.registerWorker}
           </button>
@@ -400,8 +611,8 @@ function App() {
             {[
               { label: t.totalWorkers, val: overview.total_workers, icon: <Users size={24} color="#a78bfa" />, glow: 'rgba(167,139,250,0.2)' },
               { label: t.presentToday, val: overview.present_today, icon: <UserCheck size={24} color="#34d399" />, glow: 'rgba(52,211,153,0.2)' },
-              { label: t.pendingTasks, val: overview.tasks?.pending || 0, icon: <ClipboardList size={24} color="#fbbf24" />, glow: 'rgba(251,191,36,0.2)' },
-              { label: t.completedTasks, val: overview.tasks?.completed || 0, icon: <CheckCircle2 size={24} color="#60a5fa" />, glow: 'rgba(96,165,250,0.2)' },
+              { label: t.pendingTasks, val: allTasks.filter(x => ['not_started', 'in_progress'].includes(x.status)).length, icon: <ClipboardList size={24} color="#fbbf24" />, glow: 'rgba(251,191,36,0.2)' },
+              { label: t.completedTasks, val: allTasks.filter(x => ['completed', 'accepted'].includes(x.status)).length, icon: <CheckCircle2 size={24} color="#60a5fa" />, glow: 'rgba(96,165,250,0.2)' },
             ].map((m, i) => (
               <div key={i} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
@@ -566,6 +777,50 @@ function App() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* PENDING TASK REVIEWS */}
+          <div className="glass-panel">
+            <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <CheckCircle2 size={20} color="#34d399" /> Pending Task Reviews
+            </h3>
+            <p className="section-subtitle">Awaiting supervisor verification</p>
+            {pendingReviews.length === 0 ? (
+              <p style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>No tasks pending review.</p>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Title</th>
+                      <th>Worker</th>
+                      <th>Completed At</th>
+                      <th>Notes</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingReviews.map(t => (
+                      <tr key={t.id}>
+                        <td style={{ fontWeight: 500 }}>{t.title}</td>
+                        <td>{t.worker_name} <br/><span style={{ fontSize: '0.75rem', color: 'gray' }}>{t.worker_employee_id}</span></td>
+                        <td>{new Date(t.completed_at).toLocaleString()}</td>
+                        <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.proof_notes || '--'}</td>
+                        <td>
+                          <button className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }} onClick={() => {
+                            setReviewTaskItem(t);
+                            setReviewComment('');
+                            setReviewMsg({ type: '', text: '' });
+                            setReviewLoading(false);
+                            setIsReviewOpen(true);
+                          }}>Review</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* ATTENDANCE REPORT */}

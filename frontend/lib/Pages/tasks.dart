@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:swacchtrack/services/api_service.dart';
+import 'package:swacchtrack/utils/language_provider.dart';
 
 // ─────────────────────────────────────────────
 //  MAIN TASKS PAGE — shows list of tasks
@@ -98,17 +100,17 @@ class _ProofOfWorkPageState extends State<ProofOfWorkPage>
   String _statusLabel(String? status) {
     switch (status) {
       case 'not_started':
-        return 'Not Started';
+        return t('status_not_started');
       case 'in_progress':
-        return 'In Progress';
+        return t('status_in_progress');
       case 'completed':
-        return 'Completed';
+        return t('status_completed');
       case 'accepted':
-        return 'Accepted ✅';
+        return t('status_accepted');
       case 'rejected':
-        return 'Rejected ❌';
+        return t('status_rejected');
       default:
-        return status ?? 'Unknown';
+        return status ?? t('unknown');
     }
   }
 
@@ -146,16 +148,16 @@ class _ProofOfWorkPageState extends State<ProofOfWorkPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.task_alt, size: 64, color: Colors.grey),
+            Icon(Icons.task_alt, size: 64, color: Colors.grey),
             const SizedBox(height: 10),
-            const Text(
-              "No tasks assigned yet",
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+            Text(
+              t('no_tasks'),
+              style: const TextStyle(fontSize: 16, color: Colors.grey),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _fetchTasks,
-              child: const Text("Refresh"),
+              child: Text(t('refresh')),
             ),
           ],
         ),
@@ -508,8 +510,8 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Task Details"),
-        backgroundColor: Color.fromRGBO(37, 30, 163, 1),
+        title: Text(t('task_details')),
+        backgroundColor: const Color.fromRGBO(37, 30, 163, 1),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -611,20 +613,96 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                     const SizedBox(height: 16),
                   ],
 
-                  // Details
                   const Divider(),
-                  _buildInfoTile("Type", _task?['type'] ?? 'N/A'),
+                  _buildInfoTile(t('type_label'), _task?['type'] ?? 'N/A'),
                   _buildInfoTile(
-                    "Assigned by",
+                    t('assigned_by_label'),
                     _task?['assigned_by_name'] ?? 'N/A',
                   ),
                   if (_task?['due_date'] != null)
                     _buildInfoTile(
-                      "Due date",
+                      t('due_date_label'),
                       _task!['due_date'].toString().substring(0, 10),
                     ),
+                  
+                  // Location Map Link
+                  if (_task?['latitude'] != null && _task?['longitude'] != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 100,
+                            child: Text(
+                              t('location_label'),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () async {
+                                final url = Uri.parse('https://www.google.com/maps?q=${_task!['latitude']},${_task!['longitude']}');
+                                if (await canLaunchUrl(url)) {
+                                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                                } else {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open map')));
+                                  }
+                                }
+                              },
+                              child: Text(
+                                t('open_map'),
+                                style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (_task?['lat'] != null && _task?['lng'] != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 100,
+                            child: Text(
+                              t('location_label'),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () async {
+                                final url = Uri.parse('https://www.google.com/maps?q=${_task!['lat']},${_task!['lng']}');
+                                if (await canLaunchUrl(url)) {
+                                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                                } else {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open map')));
+                                  }
+                                }
+                              },
+                              child: Text(
+                                t('open_map'),
+                                style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   if (_task?['supervisor_comment'] != null)
-                    _buildInfoTile("Review", _task!['supervisor_comment']),
+                    _buildInfoTile(t('review_label'), _task!['supervisor_comment']),
                   const Divider(),
 
                   const SizedBox(height: 16),
@@ -658,7 +736,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                 )
               : const Icon(Icons.play_arrow, color: Colors.white),
           label: Text(
-            status == 'rejected' ? "Restart Task" : "Start Task",
+            status == 'rejected' ? t('restart_task') : t('start_task'),
             style: const TextStyle(fontSize: 18, color: Colors.white),
           ),
           style: ElevatedButton.styleFrom(
@@ -676,9 +754,9 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Complete Task with Proof",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          Text(
+            t('complete_task_proof'),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
 
@@ -697,7 +775,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
             TextButton.icon(
               onPressed: _takeProofPhoto,
               icon: const Icon(Icons.camera_alt),
-              label: const Text("Retake Photo"),
+              label: Text(t('retake_photo')),
             ),
           ] else ...[
             SizedBox(
@@ -706,7 +784,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
               child: OutlinedButton.icon(
                 onPressed: _takeProofPhoto,
                 icon: const Icon(Icons.camera_alt),
-                label: const Text("Take Proof Photo"),
+                label: Text(t('take_proof_photo')),
               ),
             ),
           ],
@@ -718,7 +796,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
             controller: _notesController,
             maxLines: 3,
             decoration: InputDecoration(
-              hintText: "Add notes (optional)...",
+              hintText: t('add_notes'),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

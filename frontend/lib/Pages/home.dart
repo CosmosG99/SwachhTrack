@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:swacchtrack/Pages/qrScan.dart';
 import 'package:swacchtrack/services/api_service.dart';
 import 'package:swacchtrack/services/location_services.dart';
+import 'package:swacchtrack/utils/language_provider.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -40,11 +41,11 @@ class _HomeState extends State<Home> {
             _checkInTime = latest['check_in_time'];
             _checkOutTime = latest['check_out_time'];
             if (_isCheckedIn) {
-              _statusMessage = '✅ Checked in today';
+              _statusMessage = t('checked_in_today');
               // Also start GPS tracking if checked in
               LocationService.start();
             } else if (status == 'checked_out') {
-              _statusMessage = '✅ Checked out today';
+              _statusMessage = t('checked_out_today');
             }
           });
         }
@@ -94,7 +95,7 @@ class _HomeState extends State<Home> {
       if (!mounted) return;
       setState(() {
         _isCheckedIn = true;
-        _statusMessage = result['message'] ?? '✅ Checked in';
+        _statusMessage = result['message'] ?? t('checked_in');
         _checkInTime = result['attendance']?['check_in_time'];
       });
 
@@ -136,7 +137,7 @@ class _HomeState extends State<Home> {
       if (!mounted) return;
       setState(() {
         _isCheckedIn = false;
-        _statusMessage = result['message'] ?? '✅ Checked out';
+        _statusMessage = result['message'] ?? t('checked_out');
         _checkOutTime = result['attendance']?['check_out_time'];
       });
 
@@ -214,11 +215,11 @@ class _HomeState extends State<Home> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       Text(
-                        'In: ${_formatTime(_checkInTime)}',
+                        '${t('in_label')}: ${_formatTime(_checkInTime)}',
                         style: const TextStyle(fontSize: 14),
                       ),
                       Text(
-                        'Out: ${_formatTime(_checkOutTime)}',
+                        '${t('out_label')}: ${_formatTime(_checkOutTime)}',
                         style: const TextStyle(fontSize: 14),
                       ),
                     ],
@@ -250,9 +251,9 @@ class _HomeState extends State<Home> {
                   borderRadius: BorderRadius.circular(15),
                 ),
               ),
-              child: const Text(
-                "GPS Check In",
-                style: TextStyle(fontSize: 24, color: Colors.black),
+              child: Text(
+                t('gps_check_in'),
+                style: const TextStyle(fontSize: 24, color: Colors.black),
               ),
             ),
           ),
@@ -273,9 +274,9 @@ class _HomeState extends State<Home> {
                   borderRadius: BorderRadius.circular(15),
                 ),
               ),
-              child: const Text(
-                "Check Out",
-                style: TextStyle(fontSize: 24, color: Colors.black),
+              child: Text(
+                t('check_out'),
+                style: const TextStyle(fontSize: 24, color: Colors.black),
               ),
             ),
           ),
@@ -289,9 +290,9 @@ class _HomeState extends State<Home> {
             child: ElevatedButton.icon(
               onPressed: (_isLoading || _isCheckedIn) ? null : _handleQrCheckIn,
               icon: const Icon(Icons.qr_code_scanner, size: 28),
-              label: const Text(
-                "Scan QR & Check In",
-                style: TextStyle(fontSize: 20),
+              label: Text(
+                t('scan_qr_check_in'),
+                style: const TextStyle(fontSize: 20),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
