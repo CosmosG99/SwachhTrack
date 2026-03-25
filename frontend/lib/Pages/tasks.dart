@@ -131,7 +131,10 @@ class _ProofOfWorkPageState extends State<ProofOfWorkPage>
               const SizedBox(height: 10),
               Text(_error!, textAlign: TextAlign.center),
               const SizedBox(height: 20),
-              ElevatedButton(onPressed: _fetchTasks, child: const Text("Retry")),
+              ElevatedButton(
+                onPressed: _fetchTasks,
+                child: const Text("Retry"),
+              ),
             ],
           ),
         ),
@@ -145,8 +148,10 @@ class _ProofOfWorkPageState extends State<ProofOfWorkPage>
           children: [
             const Icon(Icons.task_alt, size: 64, color: Colors.grey),
             const SizedBox(height: 10),
-            const Text("No tasks assigned yet",
-                style: TextStyle(fontSize: 16, color: Colors.grey)),
+            const Text(
+              "No tasks assigned yet",
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _fetchTasks,
@@ -180,9 +185,8 @@ class _ProofOfWorkPageState extends State<ProofOfWorkPage>
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => TaskDetailPage(
-                      taskId: task['id'].toString(),
-                    ),
+                    builder: (_) =>
+                        TaskDetailPage(taskId: task['id'].toString()),
                   ),
                 );
                 // Refresh list when coming back
@@ -207,12 +211,15 @@ class _ProofOfWorkPageState extends State<ProofOfWorkPage>
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: _priorityColor(priority).withAlpha(30),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                                color: _priorityColor(priority).withAlpha(120)),
+                              color: _priorityColor(priority).withAlpha(120),
+                            ),
                           ),
                           child: Text(
                             priority.toUpperCase(),
@@ -232,8 +239,7 @@ class _ProofOfWorkPageState extends State<ProofOfWorkPage>
                     if (task['type'] != null)
                       Text(
                         'Type: ${task['type']}',
-                        style: TextStyle(
-                            fontSize: 13, color: Colors.grey[600]),
+                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                       ),
 
                     const SizedBox(height: 8),
@@ -243,7 +249,9 @@ class _ProofOfWorkPageState extends State<ProofOfWorkPage>
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: _statusColor(status),
                             borderRadius: BorderRadius.circular(12),
@@ -357,14 +365,14 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       _fetchTask(); // Refresh
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error starting task')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Error starting task')));
     } finally {
       if (mounted) setState(() => _isUpdating = false);
     }
@@ -399,8 +407,9 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       double? lat, lng;
       try {
         final position = await Geolocator.getCurrentPosition(
-          locationSettings:
-              const LocationSettings(accuracy: LocationAccuracy.high),
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
         );
         lat = position.latitude;
         lng = position.longitude;
@@ -428,14 +437,14 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       _fetchTask(); // Refresh to show updated status
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error completing task')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Error completing task')));
     } finally {
       if (mounted) setState(() => _isUpdating = false);
     }
@@ -481,9 +490,13 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
         children: [
           SizedBox(
             width: 100,
-            child: Text(label,
-                style: TextStyle(
-                    fontWeight: FontWeight.bold, color: Colors.grey[700])),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
           ),
           Expanded(child: Text(value)),
         ],
@@ -501,110 +514,126 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_error!),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: _fetchTask,
+                    child: const Text("Retry"),
+                  ),
+                ],
+              ),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title
+                  Text(
+                    _task?['title'] ?? 'Untitled',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Status + Priority row
+                  Row(
                     children: [
-                      Text(_error!),
-                      const SizedBox(height: 10),
-                      ElevatedButton(
-                          onPressed: _fetchTask,
-                          child: const Text("Retry")),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _statusColor(_task?['status']),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          (_task?['status'] ?? 'unknown')
+                              .toString()
+                              .replaceAll('_', ' ')
+                              .toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _priorityColor(
+                            _task?['priority'],
+                          ).withAlpha(30),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _priorityColor(_task?['priority']),
+                          ),
+                        ),
+                        child: Text(
+                          (_task?['priority'] ?? 'medium').toUpperCase(),
+                          style: TextStyle(
+                            color: _priorityColor(_task?['priority']),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Title
-                      Text(
-                        _task?['title'] ?? 'Untitled',
-                        style: const TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold),
+
+                  const SizedBox(height: 20),
+
+                  // Description
+                  if (_task?['description'] != null &&
+                      _task!['description'].toString().isNotEmpty) ...[
+                    const Text(
+                      "Description",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(_task!['description']),
+                    const SizedBox(height: 16),
+                  ],
 
-                      const SizedBox(height: 12),
-
-                      // Status + Priority row
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: _statusColor(_task?['status']),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              (_task?['status'] ?? 'unknown')
-                                  .toString()
-                                  .replaceAll('_', ' ')
-                                  .toUpperCase(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: _priorityColor(_task?['priority'])
-                                  .withAlpha(30),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                  color: _priorityColor(_task?['priority'])),
-                            ),
-                            child: Text(
-                              (_task?['priority'] ?? 'medium').toUpperCase(),
-                              style: TextStyle(
-                                color: _priorityColor(_task?['priority']),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Description
-                      if (_task?['description'] != null &&
-                          _task!['description'].toString().isNotEmpty) ...[
-                        const Text("Description",
-                            style: TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 6),
-                        Text(_task!['description']),
-                        const SizedBox(height: 16),
-                      ],
-
-                      // Details
-                      const Divider(),
-                      _buildInfoTile("Type", _task?['type'] ?? 'N/A'),
-                      _buildInfoTile("Assigned by",
-                          _task?['assigned_by_name'] ?? 'N/A'),
-                      if (_task?['due_date'] != null)
-                        _buildInfoTile("Due date",
-                            _task!['due_date'].toString().substring(0, 10)),
-                      if (_task?['supervisor_comment'] != null)
-                        _buildInfoTile(
-                            "Review", _task!['supervisor_comment']),
-                      const Divider(),
-
-                      const SizedBox(height: 16),
-
-                      // Action section based on status
-                      _buildActionSection(),
-                    ],
+                  // Details
+                  const Divider(),
+                  _buildInfoTile("Type", _task?['type'] ?? 'N/A'),
+                  _buildInfoTile(
+                    "Assigned by",
+                    _task?['assigned_by_name'] ?? 'N/A',
                   ),
-                ),
+                  if (_task?['due_date'] != null)
+                    _buildInfoTile(
+                      "Due date",
+                      _task!['due_date'].toString().substring(0, 10),
+                    ),
+                  if (_task?['supervisor_comment'] != null)
+                    _buildInfoTile("Review", _task!['supervisor_comment']),
+                  const Divider(),
+
+                  const SizedBox(height: 16),
+
+                  // Action section based on status
+                  _buildActionSection(),
+                ],
+              ),
+            ),
     );
   }
 
@@ -623,7 +652,10 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
               : const Icon(Icons.play_arrow, color: Colors.white),
           label: Text(
             status == 'rejected' ? "Restart Task" : "Start Task",
@@ -644,8 +676,10 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Complete Task with Proof",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text(
+            "Complete Task with Proof",
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 12),
 
           // Proof image preview / take photo
@@ -704,7 +738,10 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                   : const Icon(Icons.check_circle, color: Colors.white),
               label: const Text(
                 "Mark as Complete",

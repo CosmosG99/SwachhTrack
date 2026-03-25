@@ -103,14 +103,14 @@ class _HomeState extends State<Home> {
       );
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -145,14 +145,14 @@ class _HomeState extends State<Home> {
       );
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -198,9 +198,7 @@ class _HomeState extends State<Home> {
               decoration: BoxDecoration(
                 color: Color.fromRGBO(51, 45, 152, 0.15),
                 borderRadius: BorderRadius.circular(15),
-                border: Border.all(
-                  color: Color.fromRGBO(37, 30, 163, 0.4),
-                ),
+                border: Border.all(color: Color.fromRGBO(37, 30, 163, 0.4)),
               ),
               child: Column(
                 children: [
@@ -215,10 +213,14 @@ class _HomeState extends State<Home> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      Text('In: ${_formatTime(_checkInTime)}',
-                          style: const TextStyle(fontSize: 14)),
-                      Text('Out: ${_formatTime(_checkOutTime)}',
-                          style: const TextStyle(fontSize: 14)),
+                      Text(
+                        'In: ${_formatTime(_checkInTime)}',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      Text(
+                        'Out: ${_formatTime(_checkOutTime)}',
+                        style: const TextStyle(fontSize: 14),
+                      ),
                     ],
                   ),
                 ],

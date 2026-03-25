@@ -21,7 +21,6 @@ class _ProfileState extends State<Profile> {
 
   Future<void> _loadProfile() async {
     try {
-      // First try cached user from SharedPreferences
       final savedUser = await ApiService.getSavedUser();
       if (savedUser != null && mounted) {
         setState(() {
@@ -30,7 +29,6 @@ class _ProfileState extends State<Profile> {
         });
       }
 
-      // Then refresh from server
       final response = await ApiService.getMe();
       if (mounted) {
         setState(() {
@@ -41,16 +39,16 @@ class _ProfileState extends State<Profile> {
     } on ApiException catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to load profile')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to load profile')));
       }
     }
   }
@@ -71,8 +69,22 @@ class _ProfileState extends State<Profile> {
       height: 70,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Color.fromRGBO(51, 45, 152, 0.715),
-        borderRadius: BorderRadius.circular(30),
+        gradient: const LinearGradient(
+          colors: [
+            Color.fromRGBO(37, 30, 163, 0.95),
+            Color.fromRGBO(51, 45, 152, 0.85),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: const [
+          BoxShadow(
+            color: Color.fromRGBO(0, 0, 0, 0.25),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 25),
@@ -81,16 +93,21 @@ class _ProfileState extends State<Profile> {
           children: [
             Text(
               label,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
                 color: Colors.white,
+                letterSpacing: 0.4,
               ),
             ),
             Flexible(
               child: Text(
                 value,
-                style: TextStyle(fontSize: 16, color: Colors.white70),
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w500,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -103,7 +120,7 @@ class _ProfileState extends State<Profile> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(strokeWidth: 3));
     }
 
     final name = _user?['name'] ?? 'N/A';
@@ -113,64 +130,111 @@ class _ProfileState extends State<Profile> {
     final department = _user?['department'] ?? 'N/A';
     final email = _user?['email'] ?? 'N/A';
 
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          // Avatar + Name header
-          CircleAvatar(
-            radius: 40,
-            backgroundColor: Color.fromRGBO(37, 30, 163, 1),
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : '?',
-              style: TextStyle(fontSize: 36, color: Colors.white),
-            ),
-          ),
-
-          SizedBox(height: 10),
-
-          Text(
-            name,
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-
-          Text(
-            role.toUpperCase(),
-            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-          ),
-
-          SizedBox(height: 25),
-
-          _buildInfoRow("Employee ID", employeeId),
-          SizedBox(height: 15),
-          _buildInfoRow("Phone", phone),
-          SizedBox(height: 15),
-          _buildInfoRow("Email", email),
-          SizedBox(height: 15),
-          _buildInfoRow("Department", department),
-
-          const Spacer(),
-
-          // Logout button
-          SizedBox(
-            height: 60,
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _handleLogout,
-              icon: const Icon(Icons.logout, color: Colors.white),
-              label: Text(
-                "Logout",
-                style: TextStyle(color: Colors.white, fontSize: 20),
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF0F0F1A), Color(0xFF15153A)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+        child: Column(
+          children: [
+            /// Avatar
+            Container(
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Color.fromRGBO(37, 30, 163, 0.4),
+                    blurRadius: 18,
+                    spreadRadius: 2,
+                  ),
+                ],
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color.fromARGB(255, 193, 33, 21),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
+              child: CircleAvatar(
+                radius: 42,
+                backgroundColor: const Color.fromRGBO(37, 30, 163, 1),
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  style: const TextStyle(
+                    fontSize: 34,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+
+            const SizedBox(height: 14),
+
+            /// Name
+            Text(
+              name,
+              style: const TextStyle(
+                fontSize: 23,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                letterSpacing: 0.3,
+              ),
+            ),
+
+            const SizedBox(height: 4),
+
+            /// Role
+            Text(
+              role.toUpperCase(),
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[400],
+                letterSpacing: 1,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+
+            const SizedBox(height: 28),
+
+            _buildInfoRow("Employee ID", employeeId),
+            const SizedBox(height: 16),
+
+            _buildInfoRow("Phone", phone),
+            const SizedBox(height: 16),
+
+            _buildInfoRow("Email", email),
+            const SizedBox(height: 16),
+
+            _buildInfoRow("Department", department),
+
+            const Spacer(),
+
+            /// Logout button
+            SizedBox(
+              height: 60,
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _handleLogout,
+                icon: const Icon(Icons.logout, color: Colors.white),
+                label: const Text(
+                  "Logout",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  elevation: 6,
+                  backgroundColor: const Color.fromARGB(255, 193, 33, 21),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
