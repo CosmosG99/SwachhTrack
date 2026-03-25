@@ -39,7 +39,7 @@ class _HelmetVerifyPageState extends State<HelmetVerifyPage> {
     final cameras = await availableCameras();
 
     controller = CameraController(
-      cameras[0],
+      cameras[1],
       ResolutionPreset.medium,
       enableAudio: false,
     );

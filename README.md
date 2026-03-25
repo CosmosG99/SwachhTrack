@@ -1,55 +1,98 @@
-TO RUN THE YOLO MODEL FOR HELMET DETECTION AND ATTENDANCE
-To run your SwachhTrack AI model and the FastAPI server reliably for your PCCE project demo, you need a specific set of Python libraries and a few system-level configurations.
+# 🌍 SwachhTrack
 
-Since you are running this on Windows (as seen in your terminal), follow this checklist to ensure everything is "production-ready."
+![SwachhTrack Banner](https://img.shields.io/badge/SwachhTrack-Smart%20Sanitation%20Management-brightgreen?style=for-the-badge)  
+**A Next-Generation GPS-Based Attendance and Municipal Works Tracking System**
 
-1. Python Environment Requirements
-You should use Python 3.10 or 3.11. You can check your version by running python --version.
+SwachhTrack is an end-to-end management solution designed for municipal corporations and sanitation departments. It bridges the gap between administrators and field workers (sweepers, waste collectors) by bringing real-time visibility, automated attendance via Geofencing, Live GPS tracking, and AI-powered safety checks.
 
-Install these core libraries via your terminal:
+---
 
-PowerShell
-# Core API and Server
-pip install fastapi uvicorn python-multipart
+## ✨ Key Features
 
-# Computer Vision and Math
-pip install opencv-python numpy
+### 📍 1. Live GPS Tracking & Geofencing
+- **Real-time Map:** Supervisors can see exactly where every worker is on a live map.
+- **Geofenced Check-ins:** Workers can only check-in when they are physically inside their assigned work zone (Geofence).
+- **Route Deviation Alerts:** Immediate alerts if a worker leaves their designated area during work hours.
 
-# Only if you plan to use the YOLOv8 model in your folder
-pip install ultralytics
-2. File & Folder Requirements
-Based on your folder structure, ensure these files are in the same directory as your main.py:
+### 📱 2. Worker Mobile App (Flutter)
+- **QR Code Scanning:** Fast, secure check-ins via dynamic QR codes at work sites.
+- **Task Management:** Workers can view assigned tasks, update statuses, and upload completion photos directly from the field.
+- **Background Tracking:** Seamless continuous location updates sent battery-efficiently.
 
-haarcascade_frontalface_default.xml (OpenCV usually handles this, but having the file locally is safer for demos).
+### 💻 3. Admin Dashboard (React)
+- **Comprehensive Analytics:** Visual charts (Recharts) detailing attendance trends, task completion rates, and worker performance.
+- **Heatmaps:** Density maps of worker coverage across the city to identify neglected areas.
+- **One-Click Reports:** Export attendance and performance summaries directly as PDFs.
 
-FaceModel_lbph.yml or FaceModel.pkl (Your trained face data).
+### 🤖 4. AI-Powered Anomaly & Safety Detection (Python)
+- **PPE Compliance:** Uses YOLO (Ultralytics) and OpenCV to analyze images and ensure workers are wearing assigned safety gear (e.g., Helmets, Vests).
+- **Automated Alerts:** Emails are automatically dispatched via NodeMailer if severe anomalies are detected.
 
-yolov8n.pt (If you are switching to YOLO detection).
+---
 
-3. Hardware & Network Requirements
-Camera: A standard 720p or 1080p USB webcam.
+## 🛠️ Technology Stack
 
-Networking (For Flutter): * Your laptop and your phone must be on the same Wi-Fi network.
+### **Backend Core (Node.js & Express)**
+- **Database:** PostgreSQL for robust ACID-compliant relational data.
+- **Authentication:** JWT (JSON Web Tokens) & bcrypt.
+- **Real-time:** `Socket.io` for live map tracking.
+- **Utilities:** `nodemailer` for alerts, `qrcode` for dynamic code generation.
 
-Firewall: You must allow Python through the Windows Firewall, or the "200 OK" you saw in Postman will turn into a "Connection Timed Out" on your phone.
+### **Admin Dashboard (React + Vite)**
+- **Maps:** `leaflet` & `react-leaflet`
+- **Charts:** `recharts` for rich data visualization.
+- **Exports:** `jspdf` & `jspdf-autotable`
+- **Icons:** `lucide-react`
 
-4. The requirements.txt File
-It is a best practice for Computer Engineering projects to include a requirements.txt file. This allows your teammates or examiners to install everything in one go.
+### **Mobile App (Flutter)**
+- **Maps & Location:** `google_maps_flutter`, `flutter_map`, `geolocator`
+- **Camera & Scanning:** `camera`, `mobile_scanner`
+- **Background Services:** `flutter_background_service`
 
-Create a file named requirements.txt in your anomaly-detection folder and paste this:
+### **Anomaly Detection (Python)**
+- **API Framework:** `FastAPI`, `uvicorn`
+- **Computer Vision:** `opencv-python`, `numpy`
+- **AI Models:** `ultralytics` (YOLO)
 
-Plaintext
-fastapi==0.109.0
-uvicorn==0.27.0
-python-multipart==0.0.6
-opencv-python==4.9.0.80
-numpy==1.26.3
-ultralytics==8.1.0
-To install from this file later, anyone can just run: pip install -r requirements.txt.
+---
 
-5. Deployment Command
-To keep the server alive and auto-update when you change the code, always run it with the --reload flag:
+## 🚀 Getting Started
 
-PowerShell
-python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
-Note: Using --host 0.0.0.0 is what allows your Flutter app to find the server. If you use 127.0.0.1, only Postman on the same computer can talk to it.
+### 1. Backend Setup
+```bash
+cd backend
+npm install
+# Set up .env with DB credentials and SMTP details
+npm run db:init # Initialize Schema
+npm start       # or npm run dev
+```
+
+### 2. Admin Dashboard
+```bash
+cd dashboard
+npm install
+npm run dev
+```
+
+### 3. Mobile App
+```bash
+cd frontend
+flutter pub get
+flutter run
+```
+
+### 4. AI/Anomaly Detection Service
+```bash
+cd anomaly-detection
+py -m pip install -r requirements.txt
+py main.py
+```
+
+---
+
+## 📖 API Documentation
+For a complete list of endpoints (Auth, Dashboard, Tasks, Geofences, and Tracking), refer to the [API_ENDPOINTS.md](./API_ENDPOINTS.md) file located in the root directory.
+
+---
+
+**Built with ❤️ for a cleaner, smarter, and safer tomorrow.**
