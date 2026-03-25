@@ -4,8 +4,8 @@ import { loginUser } from './api';
 import translations from './i18n';
 
 export default function Login({ onLogin, lang = 'en', onChangeLang }) {
-  const [employeeId, setEmployeeId] = useState('');
-  const [password, setPassword] = useState('');
+  const [employeeId, setEmployeeId] = useState('ADMIN001');
+  const [password, setPassword] = useState('admin123');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
