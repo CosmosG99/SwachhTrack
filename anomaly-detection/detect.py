@@ -23,17 +23,21 @@ import time
 import pickle
 import numpy as np
 from datetime import datetime
+import pyttsx3
+import threading
+import queue
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 IMAGES_FOLDER      = "Images"
 ENCODE_FILE        = "FaceModel.pkl"
 LOG_FILE           = "logs/attendance.csv"
+HELMET_PHOTOS_DIR  = "logs/helmet_photos"
 
 RECHECK_SECONDS    = 30
 PPE_CONFIRM_FRAMES = 12
 PPE_TIMEOUT_FRAMES = 200
 RESULT_DISPLAY_SEC = 3
-FACE_CONFIDENCE    = 55
+FACE_CONFIDENCE    = 85
 
 # ── Helmet detection tuning ──────────────────────────────────────────────────
 # The helmet blob must be this many times LARGER than the stored face box
@@ -42,7 +46,7 @@ HELMET_SIZE_RATIO  = 1.3   # blob width must be >= face_width * this value
 
 # Darkness threshold — pixels below this brightness are "dark"
 # 60 works well indoors; increase to 80 if room is very bright
-DARK_PIXEL_THRESH  = 70
+DARK_PIXEL_THRESH  = 80
 
 # Minimum % of the search zone that must be dark
 MIN_DARK_COVERAGE  = 0.55
@@ -63,16 +67,66 @@ YELLOW = (0, 220, 255)
 DARK   = (40, 40, 40)
 
 os.makedirs("logs", exist_ok=True)
+os.makedirs(HELMET_PHOTOS_DIR, exist_ok=True)
+
+# ─── Voice Engine ────────────────────────────────────────────────────────────
+voice_queue = queue.Queue()
+voice_stop_flag = False
+
+def voice_worker():
+    """Dedicated thread for handling all TTS audio"""
+    engine = pyttsx3.init()
+    engine.setProperty('rate', 150)  # Speed of speech
+    engine.setProperty('volume', 1.0)  # Volume (0.0 to 1.0)
+    
+    while not voice_stop_flag:
+        try:
+            text = voice_queue.get(timeout=0.5)
+            if text:
+                print(f"[VOICE] Speaking: {text}")
+                engine.say(text)
+                engine.runAndWait()
+        except queue.Empty:
+            pass
+        except Exception as e:
+            print(f"[VOICE ERROR] {e}")
+
+def speak(text):
+    """Add text to voice queue for async speaking"""
+    try:
+        voice_queue.put(text, block=False)
+    except queue.Full:
+        print(f"[VOICE] Queue full, skipping: {text}")
+
+# Start voice worker thread
+voice_thread = threading.Thread(target=voice_worker, daemon=True)
+voice_thread.start()
+
+# ─── Photo Capture ───────────────────────────────────────────────────────────
+def save_helmet_photo(frame, worker_id):
+    """Save a photo of the worker with helmet on"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{worker_id}_{timestamp}_helmet.jpg"
+    filepath = os.path.join(HELMET_PHOTOS_DIR, filename)
+    
+    try:
+        cv2.imwrite(filepath, frame)
+        print(f"[PHOTO] Helmet photo saved: {filepath}")
+        return filepath
+    except Exception as e:
+        print(f"[ERROR] Failed to save helmet photo: {e}")
+        return None
 
 # ─── CSV Logger ──────────────────────────────────────────────────────────────
-def log_event(worker_id, status):
+def log_event(worker_id, status, photo_path=None):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     file_exists = os.path.isfile(LOG_FILE)
     with open(LOG_FILE, 'a', newline='') as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(["Timestamp", "WorkerID", "Status"])
-        writer.writerow([now, worker_id, status])
+            writer.writerow(["Timestamp", "WorkerID", "Status", "HelmetPhotoPath"])
+        photo_info = photo_path if photo_path else "N/A"
+        writer.writerow([now, worker_id, status, photo_info])
     print(f"[LOG] {now}  {worker_id}  →  {status}")
 
 # ─── Face Model ──────────────────────────────────────────────────────────────
@@ -258,6 +312,8 @@ def draw_result(frame, granted, name):
 
 # ─── Recent check tracker ────────────────────────────────────────────────────
 last_check_times = {}
+last_voice_prompt = 0  # Track last time we gave voice prompt
+
 def was_checked_recently(wid):
     last = last_check_times.get(wid)
     if last is None: return False
@@ -274,6 +330,7 @@ print("=" * 55)
 print(f"  Size ratio needed : {HELMET_SIZE_RATIO}x face width")
 print(f"  Dark pixel thresh : {DARK_PIXEL_THRESH}")
 print(f"  Min dark coverage : {MIN_DARK_COVERAGE:.0%}")
+print(f"  Helmet photos saved to: {HELMET_PHOTOS_DIR}/")
 print("=" * 55)
 
 recognizer, worker_ids = load_face_model()
@@ -290,9 +347,10 @@ for wid in worker_ids:
 
 print("\n[INFO] Step 1: Stand in front of camera WITHOUT helmet to be identified.")
 print("[INFO] Step 2: Put on your full-face helmet and face camera.")
+print(f"[INFO] Helmet photos will be saved to: {HELMET_PHOTOS_DIR}/")
 print("[INFO] Press Q to quit.\n")
 
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH,  960)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
@@ -305,6 +363,8 @@ result_timer  = 0
 info_counter  = 0
 last_coverage = 0.0
 last_face_box = None   # CRITICAL: stores face position for helmet search
+helmet_photo_path = None  # Store path to captured helmet photo
+last_idle_voice = 0  # Track when we last spoke in idle state
 
 while True:
     ret, frame = cap.read()
@@ -345,12 +405,21 @@ while True:
     # ── State Machine ─────────────────────────────────────────────────────────
     if state == STATE_IDLE:
         draw_idle(display)
+        
+        # Voice prompt every 5 seconds while waiting
+        current_time = time.time()
+        if current_time - last_idle_voice > 5:
+            speak("Please show your face to the camera without helmet for identification")
+            last_idle_voice = current_time
+        
         if detected_id:
             current_id    = detected_id
             current_photo = worker_photos.get(detected_id)
             info_counter  = 0
+            helmet_photo_path = None
             print(f"\n[IDENTIFIED] Worker: {current_id}  "
                   f"Face stored at: {detected_face}")
+            speak(f"Worker detected. {current_id}")
             state = STATE_ALREADY_DONE if was_checked_recently(current_id) \
                     else STATE_SHOW_INFO
 
@@ -392,15 +461,20 @@ while True:
                   f"Coverage: {last_coverage:.1%}")
 
         if ppe_streak >= PPE_CONFIRM_FRAMES:
-            log_event(current_id, "GRANTED")
+            # *** CAPTURE HELMET PHOTO WHEN CONFIRMED ***
+            helmet_photo_path = save_helmet_photo(frame, current_id)
+            
+            log_event(current_id, "GRANTED", helmet_photo_path)
             mark_checked(current_id)
             print(f"[SUCCESS] {current_id} — Helmet verified. GRANTED.")
+            speak("Permission granted. Helmet verified. Proceed to work.")
             state        = STATE_GRANTED
             result_timer = time.time()
 
         elif ppe_counter > PPE_TIMEOUT_FRAMES:
-            log_event(current_id, "DENIED")
+            log_event(current_id, "DENIED", None)
             print(f"[DENIED] {current_id} — No helmet. DENIED.")
+            speak("Permission denied. Helmet not detected. Please wear a full face helmet.")
             state        = STATE_DENIED
             result_timer = time.time()
 
@@ -448,4 +522,6 @@ while True:
 
 cap.release()
 cv2.destroyAllWindows()
+voice_stop_flag = True
+voice_thread.join(timeout=2)
 print("System shut down.")

@@ -107,3 +107,11 @@ Timestamp,WorkerID,Status
 2026-03-25 03:38:58,waylen1,DENIED
 2026-03-25 03:46:58,geetesh,DENIED
 2026-03-25 03:47:11,geetesh,GRANTED
+2026-03-25 08:16:55,waylen,GRANTED
+2026-03-25 08:17:03,waylen1,GRANTED
+2026-03-25 08:47:49,waylen1,GRANTED
+2026-03-25 09:24:30,waylen1,GRANTED,logs/helmet_photos\waylen1_20260325_092430_helmet.jpg
+2026-03-25 09:47:28,waylen1,GRANTED,logs/helmet_photos\waylen1_20260325_094728_helmet.jpg
+2026-03-25 10:02:21,waylen1,GRANTED,logs/helmet_photos\waylen1_20260325_100221_helmet.jpg
+2026-03-25 10:02:37,waylen1,GRANTED,logs/helmet_photos\waylen1_20260325_100237_helmet.jpg
+2026-03-25 10:05:48,waylen1,GRANTED,logs/helmet_photos\waylen1_20260325_100548_helmet.jpg
