@@ -25,7 +25,6 @@ import numpy as np
 from datetime import datetime
 import pyttsx3
 import threading
-import queue
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 IMAGES_FOLDER      = "Images"
@@ -69,38 +68,23 @@ DARK   = (40, 40, 40)
 os.makedirs("logs", exist_ok=True)
 os.makedirs(HELMET_PHOTOS_DIR, exist_ok=True)
 
-# ─── Voice Engine ────────────────────────────────────────────────────────────
-voice_queue = queue.Queue()
-voice_stop_flag = False
-
-def voice_worker():
-    """Dedicated thread for handling all TTS audio"""
-    engine = pyttsx3.init()
-    engine.setProperty('rate', 150)  # Speed of speech
-    engine.setProperty('volume', 1.0)  # Volume (0.0 to 1.0)
-    
-    while not voice_stop_flag:
+# ─── Voice Engine (Simple Threading) ─────────────────────────────────────────
+def speak(text):
+    """Speak text in a separate thread"""
+    def speak_async():
         try:
-            text = voice_queue.get(timeout=0.5)
-            if text:
-                print(f"[VOICE] Speaking: {text}")
-                engine.say(text)
-                engine.runAndWait()
-        except queue.Empty:
-            pass
+            print(f"[VOICE] Speaking: {text}")
+            engine = pyttsx3.init()
+            engine.setProperty('rate', 150)
+            engine.setProperty('volume', 1.0)
+            engine.say(text)
+            engine.runAndWait()
+            time.sleep(0.5)  # Small delay to ensure audio finishes
         except Exception as e:
             print(f"[VOICE ERROR] {e}")
-
-def speak(text):
-    """Add text to voice queue for async speaking"""
-    try:
-        voice_queue.put(text, block=False)
-    except queue.Full:
-        print(f"[VOICE] Queue full, skipping: {text}")
-
-# Start voice worker thread
-voice_thread = threading.Thread(target=voice_worker, daemon=True)
-voice_thread.start()
+    
+    thread = threading.Thread(target=speak_async, daemon=False)
+    thread.start()
 
 # ─── Photo Capture ───────────────────────────────────────────────────────────
 def save_helmet_photo(frame, worker_id):
@@ -522,6 +506,4 @@ while True:
 
 cap.release()
 cv2.destroyAllWindows()
-voice_stop_flag = True
-voice_thread.join(timeout=2)
 print("System shut down.")
