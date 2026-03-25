@@ -12,6 +12,7 @@ const trackingRoutes = require('./routes/tracking.routes');
 const geofenceRoutes = require('./routes/geofence.routes');
 const taskRoutes = require('./routes/task.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
+const anomalyRoutes = require('./routes/anomaly.routes');
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use('/api/v1/tracking', trackingRoutes);
 app.use('/api/v1/geofences', geofenceRoutes);
 app.use('/api/v1/tasks', taskRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
+app.use('/api/v1/anomaly', anomalyRoutes);
 
 // ─── 404 HANDLER ────────────────────────────────────────
 app.use((req, res) => {

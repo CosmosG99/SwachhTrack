@@ -45,6 +45,8 @@ server.listen(config.port, () => {
     GET    /api/v1/tracking/live/:userId
     GET    /api/v1/tracking/trail/:userId
 
+    POST   /api/v1/anomaly/analyze
+
     POST   /api/v1/geofences
     GET    /api/v1/geofences
     GET    /api/v1/geofences/:id

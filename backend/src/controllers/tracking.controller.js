@@ -1,5 +1,8 @@
 const db = require('../config/database');
 const { isValidCoordinate, detectTeleportation } = require('../utils/geoUtils');
+const { runDetection } = require('../services/anomalyPipeline');
+const { buildPayloadForWard } = require('../services/anomalyService');
+const { sendAnomalyAlerts } = require('../services/emailService');
 
 /**
  * POST /api/v1/tracking/location
@@ -98,6 +101,22 @@ exports.submitLocation = async (req, res, next) => {
       inserted: inserted.length,
       warnings: warnings.length > 0 ? warnings : undefined,
     });
+
+    if (req.user.ward_id && inserted.length > 0) {
+      const wardId = req.user.ward_id;
+      setImmediate(async () => {
+        try {
+          const payload = await buildPayloadForWard(wardId);
+          if (!payload?.tracking_data?.length) return;
+          const result = await runDetection(payload);
+          if (result.alerts?.length && !result.error) {
+            await sendAnomalyAlerts(result.alerts, { wardId });
+          }
+        } catch (e) {
+          console.error('[anomaly]', e.message);
+        }
+      });
+    }
   } catch (err) {
     next(err);
   }
