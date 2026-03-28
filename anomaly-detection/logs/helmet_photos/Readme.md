@@ -1,0 +1,1 @@
+All the photos will be stored here 

@@ -136,7 +136,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     reviewed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+
+)
 
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks (assigned_to, status);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status, created_at DESC);

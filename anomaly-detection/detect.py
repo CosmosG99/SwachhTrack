@@ -36,7 +36,7 @@ RECHECK_SECONDS    = 30
 PPE_CONFIRM_FRAMES = 12
 PPE_TIMEOUT_FRAMES = 200
 RESULT_DISPLAY_SEC = 3
-FACE_CONFIDENCE    = 85
+FACE_CONFIDENCE    = 60
 
 # ── Helmet detection tuning ──────────────────────────────────────────────────
 # The helmet blob must be this many times LARGER than the stored face box
